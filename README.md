@@ -94,6 +94,4 @@ Unleash the power of AI agents on the financial markets and see where the future
 ### License
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
 
----
 
-This updated README now includes a comprehensive overview of the platform, detailed file structure, easy setup instructions, and the requested sections for data providers and platforms with their logos, links, and comments.
