@@ -2,6 +2,9 @@
 
 Welcome to the **Market Swarm Agents** – an open-source toolkit designed to bring the power of advanced AI agents to your financial market strategies. Imagine having a swarm of virtual analysts, each with their own unique trading style, working tirelessly to decode market signals and identify opportunities in real-time. Well, now you can!
 
+![image](https://github.com/user-attachments/assets/c19adab6-5f59-4660-b323-1f9df221e45d)
+
+
 
 ### 🧠 What Is It?
 This platform combines state-of-the-art machine learning models, like LSTM and Markov Chains, with rule-based trading strategies to create a diverse set of agents, each with a specialized role:
