@@ -1,0 +1,4 @@
+timestamp,agent,event_type,details
+2023-01-01 09:00:00,ScalperAgent,TRADE,{"action": "BUY", "price": 100.0, "quantity": 100}
+2023-01-01 09:15:00,TrendFollowerAgent,SIGNAL,{"trend": "UPWARD", "confidence": 0.8}
+2023-01-01 09:30:00,CorrelationAgent,ANALYSIS,{"correlated_asset": "ASSET_B", "correlation": 0.75}
