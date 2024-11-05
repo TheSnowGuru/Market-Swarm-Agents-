@@ -72,6 +72,88 @@ The **Master Agent** oversees all these agents, ranks their performance, allocat
    ```bash
    pip install -r requirements.txt
    ```
+
+### 🖥️ CLI Command Reference
+
+Market Swarm Agents provides a comprehensive CLI with multiple commands to interact with the platform:
+
+#### 1. Testing Commands
+- **Run Unit Tests**:
+  ```bash
+  python cli.py test
+  ```
+  Runs all unit tests and generates a coverage report.
+
+- **Run Integration Tests**:
+  ```bash
+  python cli.py test --integration
+  ```
+  Executes integration tests to validate system-wide functionality.
+
+#### 2. Agent Management
+- **Run Agents**:
+  ```bash
+  python cli.py run
+  ```
+  Starts all agents under Master Agent supervision with default configuration.
+
+- **Run Specific Agent**:
+  ```bash
+  python cli.py run --agent scalper
+  ```
+  Launches a specific agent type (scalper, trend-follower, correlation).
+
+#### 3. Training & Backtesting
+- **Train Agent**:
+  ```bash
+  python cli.py train --agent scalper --data path/to/data.csv
+  ```
+  Train a specific agent using provided historical market data.
+
+- **Backtest Strategy**:
+  ```bash
+  python cli.py backtest --strategy trend_follower --start-date 2023-01-01 --end-date 2023-12-31
+  ```
+  Perform comprehensive backtesting for a specific strategy within a date range.
+
+#### 4. Data Management
+- **Preprocess Data**:
+  ```bash
+  python cli.py preprocess --input raw_data.csv --output processed_data.csv
+  ```
+  Preprocess and clean market data for agent training.
+
+- **Generate Features**:
+  ```bash
+  python cli.py features --data processed_data.csv --indicators rsi,macd
+  ```
+  Extract and generate technical indicators from market data.
+
+#### 5. Performance Analysis
+- **Generate Performance Report**:
+  ```bash
+  python cli.py report --agent scalper --metrics sharpe,drawdown
+  ```
+  Create a detailed performance report for a specific agent.
+
+#### 6. Configuration
+- **List Available Configurations**:
+  ```bash
+  python cli.py config list
+  ```
+  Display available agent and strategy configurations.
+
+- **Create New Configuration**:
+  ```bash
+  python cli.py config create --agent trend_follower
+  ```
+  Interactively create a new agent configuration.
+
+### Advanced Usage Tips
+- Use `--help` with any command to get detailed information
+- Configuration files in `config/` directory control default behaviors
+- Customize agent parameters before running strategies
+
 4. **Run Tests**: Validate your setup by running tests:
    ```bash
    python cli.py test  # Run unit tests
