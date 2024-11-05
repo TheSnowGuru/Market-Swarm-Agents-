@@ -91,27 +91,16 @@ The **Master Agent** oversees all these agents, ranks their performance, allocat
 Seamlessly integrate with top market data and analysis platforms:
 
 #### 📊 Market Data Providers
-| Logo | Name | Description | Pricing |
-|------|------|-------------|---------|
-| ![Alpha Vantage](https://www.alphavantage.co/favicon.ico) | **Alpha Vantage** | Comprehensive financial data API | Free/Pro |
-| ![Polygon](https://polygon.io/favicon.ico) | **Polygon.io** | Real-time & historical market data | Tiered Pricing |
-| ![IEX Cloud](https://iexcloud.io/static/favicon.ico) | **IEX Cloud** | Stocks, ETFs, Mutual Funds | Free/Pro |
-| ![Tiingo](https://www.tiingo.com/favicon.ico) | **Tiingo** | Financial Data & Research Platform | Subscription |
+| Name | Description | Pricing |
+|------|-------------|---------|
+| **Tiingo** | Financial Data & Research Platform | Subscription |
 
 #### 📈 Performance Analysis Tools
-| Logo | Name | Key Features | Integration |
-|------|------|--------------|-------------|
-| ![VectorBT](https://vectorbt.dev/logo.png) | **VectorBT** | Advanced Backtesting | Native Support |
-| ![QuantStats](https://quantstats.readthedocs.io/en/latest/_static/logo.png) | **QuantStats** | Performance Analytics | Comprehensive Reporting |
-| ![PyAlgoTrade](https://pyalgotrade.github.io/favicon.ico) | **PyAlgoTrade** | Algorithmic Trading Framework | Strategy Simulation |
-
-### 🖥️ Deployment Platforms
-| Logo | Name | Use Case | Recommended For |
-|------|------|----------|-----------------|
-| ![Google Colab](https://colab.research.google.com/favicon.ico) | **Google Colab** | Rapid Prototyping | Experimentation |
-| ![AWS](https://aws.amazon.com/favicon.ico) | **AWS EC2** | Scalable Deployment | Production Environments |
-| ![Azure](https://azure.microsoft.com/favicon.ico) | **Azure VM** | Enterprise Solutions | Large-Scale Trading |
-| ![Heroku](https://www.heroku.com/favicon.ico) | **Heroku** | Quick Deployment | Small to Medium Projects |
+| Name | Key Features | Integration |
+|------|--------------|-------------|
+| **VectorBT** | Advanced Backtesting | Native Support |
+| **QuantStats** | Performance Analytics | Comprehensive Reporting |
+| **PyAlgoTrade** | Algorithmic Trading Framework | Strategy Simulation |
 
 
 ### 🤝 Contribute & Collaborate
