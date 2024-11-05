@@ -6,7 +6,8 @@ LOG_FILE = "logs/events_log.csv"
 AGENT_PARAMS = {
     "scalper": {"risk_tolerance": 0.5, "trade_frequency": "high"},
     "trend_follower": {"risk_tolerance": 0.3, "trade_frequency": "medium"},
-    "correlation": {"risk_tolerance": 0.4, "trade_frequency": "low"}
+    "correlation": {"risk_tolerance": 0.4, "trade_frequency": "low"},
+    "optimal_trade": {"risk_tolerance": 0.6, "trade_frequency": "medium"}
 }
 # Global configuration parameters
 
@@ -33,4 +34,25 @@ CORRELATION_AGENT_CONFIG = {
 DATA_CONFIG = {
     'historical_data_path': 'data/shared_data/historical_data.csv',
     'event_log_path': 'data/events_data/event_log.csv'
+}
+
+# New Optimal Trade Strategy Configuration
+OPTIMAL_TRADE_CONFIG = {
+    'target_yield': 0.05,           # 5% target yield
+    'time_period': 12,              # 12-period analysis window
+    'stop_loss': 0.02,              # 2% stop loss
+    'max_volatility': 0.015,        # 1.5% maximum volatility
+    'timeframe': '5m',              # 5-minute candles
+    'signal_confidence': 0.9,       # 90% signal confidence
+    'initial_capital': 10000,       # Initial trading capital
+    'max_trade_amount': 1000,       # Maximum trade size
+    'risk_management': {
+        'max_daily_loss': 0.03,     # 3% maximum daily loss
+        'max_drawdown': 0.05        # 5% maximum portfolio drawdown
+    },
+    'technical_indicators': {
+        'sma_periods': [5, 20],     # Short and long-term moving averages
+        'rsi_period': 14,           # RSI calculation period
+        'macd_periods': [12, 26, 9] # MACD indicator parameters
+    }
 }
