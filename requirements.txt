@@ -5,3 +5,8 @@ matplotlib==3.4.3
 seaborn==0.11.2
 click==8.0.1
 quantstats==0.0.45
+vectorbt
+pyalgotrade
+TA-Lib
+numpy
+pandas
