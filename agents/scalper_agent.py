@@ -1,17 +1,85 @@
 from .base_agent import BaseAgent
+import pandas as pd
+import logging
 
 class ScalperAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, config=None):
+        """
+        Initialize ScalperAgent with optional configuration
+
+        Args:
+            config (dict, optional): Configuration parameters for the scalper agent
+        """
         super().__init__("ScalperAgent")
+        self.config = config or {}
+        self.logger = logging.getLogger(__name__)
+        self.risk_tolerance = self.config.get('risk_tolerance', 0.5)
+        self.trade_frequency = self.config.get('trade_frequency', 'high')
 
-    def analyze(self):
-        # Implement scalping analysis logic
-        pass
+    def analyze(self, data: pd.DataFrame):
+        """
+        Analyze market data for scalping opportunities
 
-    def execute_trade(self):
-        # Implement scalping trade execution
-        pass
+        Args:
+            data (pd.DataFrame): Market data to analyze
 
-    def train(self, data):
-        # Implement training logic for scalper agent
-        pass
+        Returns:
+            dict: Analysis results and potential trade signals
+        """
+        try:
+            # Implement advanced scalping analysis logic
+            # Example: Short-term price movement detection
+            price_changes = data['close'].pct_change()
+            volatility = price_changes.std()
+            
+            # Basic scalping signal generation
+            signals = {
+                'volatility': volatility,
+                'trade_opportunities': price_changes[abs(price_changes) > self.risk_tolerance]
+            }
+            
+            return signals
+        except Exception as e:
+            self.logger.error(f"Scalping analysis error: {e}")
+            return {}
+
+    def execute_trade(self, signals):
+        """
+        Execute trades based on scalping signals
+
+        Args:
+            signals (dict): Trade signals from analysis
+        """
+        try:
+            # Implement trade execution logic
+            if signals.get('trade_opportunities', []):
+                self.logger.info("Executing scalping trades")
+                # Add actual trade execution logic
+        except Exception as e:
+            self.logger.error(f"Trade execution error: {e}")
+
+    def train(self, data: pd.DataFrame):
+        """
+        Train the scalper agent on historical data
+
+        Args:
+            data (pd.DataFrame): Historical market data for training
+        """
+        try:
+            # Implement machine learning or statistical training
+            analysis_results = self.analyze(data)
+            
+            # Log training results
+            self.logger.info(f"Scalper Agent Training Complete. Volatility: {analysis_results.get('volatility', 'N/A')}")
+        except Exception as e:
+            self.logger.error(f"Training error: {e}")
+
+    def run(self):
+        """
+        Run the scalper agent's main trading loop
+        """
+        try:
+            # Implement continuous trading logic
+            self.logger.info("Scalper Agent Running")
+        except Exception as e:
+            self.logger.error(f"Agent runtime error: {e}")
