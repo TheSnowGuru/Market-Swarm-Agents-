@@ -17,6 +17,25 @@ def cli():
     pass
 
 @cli.command()
+@click.option('--unit/--no-unit', default=True, help='Run unit tests')
+@click.option('--integration/--no-integration', default=False, help='Run integration tests')
+def test(unit, integration):
+    """Run project tests"""
+    import pytest
+    import sys
+
+    pytest_args = ['-v']
+    
+    if unit:
+        pytest_args.extend(['tests/unit'])
+    
+    if integration:
+        pytest_args.extend(['tests/integration'])
+    
+    result = pytest.main(pytest_args)
+    sys.exit(result)
+
+@cli.command()
 def run():
     """Run all trading agents"""
     click.echo("Running Market Swarm Agents...")
