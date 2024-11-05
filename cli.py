@@ -1,76 +1,140 @@
 import click
+import logging
+import sys
+import pandas as pd
+from master_agent.master_agent import MasterAgent
+from shared.data_handler import DataHandler
 from agents.scalper_agent import ScalperAgent
 from agents.trend_follower_agent import TrendFollowerAgent
 from agents.correlation_agent import CorrelationAgent
 from agents.optimal_trade_agent import OptimalTradeAgent
-from shared.data_handler import DataHandler
 from config import (
     SCALPER_AGENT_CONFIG, 
     TREND_FOLLOWER_AGENT_CONFIG, 
     CORRELATION_AGENT_CONFIG, 
-    OPTIMAL_TRADE_CONFIG
+    OPTIMAL_TRADE_CONFIG,
+    DATA_CONFIG
 )
 
 @click.group()
-def cli():
-    """Market Swarm Trading CLI"""
-    pass
+def swarm():
+    """Market Swarm Trading System CLI"""
+    logging.basicConfig(level=logging.INFO)
 
-@cli.command()
-@click.option('--unit/--no-unit', default=True, help='Run unit tests')
-@click.option('--integration/--no-integration', default=False, help='Run integration tests')
-def test(unit, integration):
-    """Run project tests"""
-    import pytest
-    import sys
+@swarm.command()
+@click.option('--strategy', default='all', 
+              type=click.Choice(['all', 'optimal-trade', 'scalper', 'trend-follower', 'correlation']), 
+              help='Trading strategy to run')
+@click.option('--data', type=click.Path(exists=True), 
+              default=DATA_CONFIG['historical_data_path'], 
+              help='Path to market data')
+@click.option('--config', is_flag=True, help='Display current configuration')
+def run(strategy, data, config):
+    """Run the market swarm trading system"""
+    if config:
+        # Display configuration details
+        click.echo("Current Configuration:")
+        click.echo(f"Strategy: {strategy}")
+        click.echo(f"Data Path: {data}")
+        return
 
-    pytest_args = ['-v']
+    # Initialize master agent
+    master_agent = MasterAgent()
     
-    if unit:
-        pytest_args.extend(['tests/unit'])
+    # Load data
+    data_handler = DataHandler({})
+    market_data = data_handler.load_historical_data(data)
     
-    if integration:
-        pytest_args.extend(['tests/integration'])
+    # Select and add agents based on strategy
+    agent_configs = {
+        'optimal-trade': (OptimalTradeAgent, OPTIMAL_TRADE_CONFIG),
+        'scalper': (ScalperAgent, SCALPER_AGENT_CONFIG),
+        'trend-follower': (TrendFollowerAgent, TREND_FOLLOWER_AGENT_CONFIG),
+        'correlation': (CorrelationAgent, CORRELATION_AGENT_CONFIG)
+    }
     
-    result = pytest.main(pytest_args)
-    sys.exit(result)
+    if strategy == 'all':
+        for AgentClass, config in agent_configs.values():
+            agent = AgentClass(config=config)
+            master_agent.add_agent(agent)
+    elif strategy in agent_configs:
+        AgentClass, config = agent_configs[strategy]
+        agent = AgentClass(config=config)
+        master_agent.add_agent(agent)
+    
+    # Run the system
+    master_agent.run()
 
-@cli.command()
-def run():
-    """Run all trading agents"""
-    click.echo("Running Market Swarm Agents...")
-    # Implement run logic for multiple agents
-
-@cli.command()
-@click.option('--agent', type=click.Choice(['scalper', 'trend_follower', 'correlation', 'optimal_trade']))
-@click.option('--data', type=click.Path(exists=True))
-def train(agent, data):
-    """Train a specific agent"""
-    click.echo(f"Training {agent} agent with data from {data}")
+@swarm.command()
+@click.option('--agent', type=click.Choice(['scalper', 'trend-follower', 'correlation', 'optimal-trade']), 
+              help='Specific agent to train')
+@click.option('--data', type=click.Path(exists=True), 
+              default=DATA_CONFIG['historical_data_path'], 
+              help='Training data path')
+@click.option('--output', type=click.Path(), help='Path to save trained model')
+def train(agent, data, output):
+    """Train trading agents"""
+    logging.info(f"Training {agent} agent with data from {data}")
     
-    if agent == 'scalper':
-        agent_instance = ScalperAgent(config=SCALPER_AGENT_CONFIG)
-    elif agent == 'trend_follower':
-        agent_instance = TrendFollowerAgent(config=TREND_FOLLOWER_AGENT_CONFIG)
-    elif agent == 'correlation':
-        agent_instance = CorrelationAgent(config=CORRELATION_AGENT_CONFIG)
-    elif agent == 'optimal_trade':
-        agent_instance = OptimalTradeAgent(config=OPTIMAL_TRADE_CONFIG)
+    agent_classes = {
+        'scalper': (ScalperAgent, SCALPER_AGENT_CONFIG),
+        'trend-follower': (TrendFollowerAgent, TREND_FOLLOWER_AGENT_CONFIG),
+        'correlation': (CorrelationAgent, CORRELATION_AGENT_CONFIG),
+        'optimal-trade': (OptimalTradeAgent, OPTIMAL_TRADE_CONFIG)
+    }
+    
+    if agent not in agent_classes:
+        click.echo(f"Invalid agent: {agent}")
+        return
+    
+    AgentClass, config = agent_classes[agent]
     
     # Load and preprocess data
-    data = DataHandler.load_data(data)
-    processed_data = DataHandler.preprocess_data(data)
+    data_handler = DataHandler({})
+    market_data = data_handler.load_historical_data(data)
     
     # Train the agent
-    agent_instance.train(processed_data)
+    agent_instance = AgentClass(config=config)
+    agent_instance.train(market_data)
+    
+    # Optional: Save trained model
+    if output:
+        agent_instance.save_model(output)
 
-@cli.command()
-def run_optimal_trade():
-    """Run Optimal Trade Agent"""
-    click.echo("Running Optimal Trade Agent...")
-    agent = OptimalTradeAgent(name="OptimalTradeAgent", config=OPTIMAL_TRADE_CONFIG)
-    agent.train(DataHandler.load_data(OPTIMAL_TRADE_CONFIG['historical_data_path']))
-    agent.run()
+@swarm.command()
+@click.option('--strategy', default='optimal-trade', help='Strategy to backtest')
+@click.option('--data', type=click.Path(exists=True), 
+              default=DATA_CONFIG['historical_data_path'], 
+              help='Backtesting data path')
+@click.option('--report', type=click.Path(), help='Path to save backtest report')
+def backtest(strategy, data, report):
+    """Perform backtesting of trading strategies"""
+    logging.info(f"Backtesting {strategy} strategy")
+    
+    # Load data
+    data_handler = DataHandler({})
+    market_data = data_handler.load_historical_data(data)
+    
+    # Perform backtesting based on strategy
+    if strategy == 'optimal-trade':
+        agent = OptimalTradeAgent(config=OPTIMAL_TRADE_CONFIG)
+        backtest_results = agent.backtest(market_data)
+        
+        # Display or save report
+        if report:
+            with open(report, 'w') as f:
+                f.write(str(backtest_results))
+        else:
+            click.echo(backtest_results)
+
+@swarm.command()
+def test():
+    """Run project tests"""
+    import pytest
+    
+    # Run all tests
+    result = pytest.main(['-v', 'tests'])
+    sys.exit(result)
 
 if __name__ == '__main__':
-    cli()
+    swarm()
