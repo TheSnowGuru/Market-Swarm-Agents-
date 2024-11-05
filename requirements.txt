@@ -10,3 +10,8 @@ pyalgotrade
 TA-Lib
 numpy
 pandas
+yfinance
+ccxt
+pandas
+numpy
+logging
