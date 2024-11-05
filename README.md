@@ -2,8 +2,6 @@
 
 Welcome to the **Market Swarm Agents** – an open-source toolkit designed to bring the power of advanced AI agents to your financial market strategies. Imagine having a swarm of virtual analysts, each with their own unique trading style, working tirelessly to decode market signals and identify opportunities in real-time. Well, now you can!
 
-![image](https://github.com/user-attachments/assets/c19adab6-5f59-4660-b323-1f9df221e45d)
-
 
 
 ### 🧠 What Is It?
@@ -120,7 +118,7 @@ Seamlessly integrate with top market data and analysis platforms:
 This project is a community effort! Feel free to open issues, suggest features, or submit pull requests. Let's build something amazing together and push the boundaries of market analysis with AI!
 
 ### 📬 Stay in Touch
-Join our [Discord](#) community for discussions, updates, and more. Share your ideas, ask questions, and connect with fellow market enthusiasts.
+Join our [Discord](https://discord.gg/d2WNmkPaGY) community for discussions, updates, and more. Share your ideas, ask questions, and connect with fellow market enthusiasts.
 
 ---
 
