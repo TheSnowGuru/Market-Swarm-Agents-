@@ -108,3 +108,132 @@ class MasterAgent:
         for agent_name, performances in self.performance_tracker.items():
             avg_performance = sum(performances) / len(performances) if performances else 0
             self.logger.info(f"Agent {agent_name} - Avg Performance: {avg_performance}")
+import pytest
+import pandas as pd
+import numpy as np
+from shared.feature_extractor import calculate_indicators
+
+def test_calculate_indicators():
+    # Create sample data
+    data = pd.DataFrame({
+        'open': [100, 105, 110, 108, 112],
+        'high': [105, 110, 115, 112, 118],
+        'low': [95, 100, 105, 103, 107],
+        'close': [102, 107, 112, 110, 115],
+        'volume': [1000, 1200, 1500, 1300, 1600]
+    })
+
+    # Test indicator calculation
+    result = calculate_indicators(data)
+
+    # Check that new columns are added
+    expected_columns = [
+        'open', 'high', 'low', 'close', 'volume', 
+        'SMA_10', 'EMA_10', 'RSI_14', 'MACD', 'Signal_Line'
+    ]
+    assert all(col in result.columns for col in expected_columns)
+
+    # Basic sanity checks for indicators
+    assert not result['SMA_10'].isnull().all()
+    assert not result['EMA_10'].isnull().all()
+    assert not result['RSI_14'].isnull().all()
+    assert not result['MACD'].isnull().all()
+    assert not result['Signal_Line'].isnull().all()
+
+def test_calculate_indicators_empty_dataframe():
+    # Test handling of empty DataFrame
+    empty_data = pd.DataFrame()
+    with pytest.raises(ValueError):
+        calculate_indicators(empty_data)
+
+def test_calculate_indicators_missing_columns():
+    # Test handling of incomplete DataFrame
+    incomplete_data = pd.DataFrame({
+        'open': [100, 105, 110],
+        'close': [102, 107, 112]
+    })
+    with pytest.raises(KeyError):
+        calculate_indicators(incomplete_data)
+import pytest
+import pandas as pd
+import vectorbt as vbt
+from utils.vectorbt_utils import (
+    calculate_portfolio_metrics, 
+    optimize_portfolio_allocation
+)
+
+def test_calculate_portfolio_metrics():
+    # Create sample price data
+    prices = pd.DataFrame({
+        'Asset1': [100, 105, 110, 108, 112],
+        'Asset2': [50, 52, 55, 54, 56]
+    })
+
+    # Test portfolio metrics calculation
+    metrics = calculate_portfolio_metrics(prices)
+
+    # Check that metrics are calculated
+    assert 'total_return' in metrics
+    assert 'sharpe_ratio' in metrics
+    assert 'max_drawdown' in metrics
+    assert isinstance(metrics['total_return'], float)
+    assert isinstance(metrics['sharpe_ratio'], float)
+    assert isinstance(metrics['max_drawdown'], float)
+
+def test_optimize_portfolio_allocation():
+    # Create sample price data
+    prices = pd.DataFrame({
+        'Asset1': [100, 105, 110, 108, 112],
+        'Asset2': [50, 52, 55, 54, 56]
+    })
+
+    # Test portfolio optimization
+    optimal_weights = optimize_portfolio_allocation(prices)
+
+    # Check optimization results
+    assert len(optimal_weights) == prices.shape[1]
+    assert all(0 <= weight <= 1 for weight in optimal_weights)
+    assert abs(sum(optimal_weights) - 1.0) < 1e-10  # Weights should sum to 1
+import pytest
+import pandas as pd
+from pyalgotrade import strategy
+from utils.pyalgotrade_utils import (
+    create_pyalgotrade_strategy,
+    analyze_trade_performance
+)
+
+def test_create_pyalgotrade_strategy():
+    # Create sample price data
+    data = pd.DataFrame({
+        'open': [100, 105, 110, 108, 112],
+        'high': [105, 110, 115, 112, 118],
+        'low': [95, 100, 105, 103, 107],
+        'close': [102, 107, 112, 110, 115],
+        'volume': [1000, 1200, 1500, 1300, 1600]
+    })
+
+    # Test strategy creation
+    strategy_instance = create_pyalgotrade_strategy(data)
+
+    # Check that a valid strategy is created
+    assert isinstance(strategy_instance, strategy.BacktestingStrategy)
+    assert hasattr(strategy_instance, 'enterLong')
+    assert hasattr(strategy_instance, 'enterShort')
+
+def test_analyze_trade_performance():
+    # Create sample trade data
+    trades = [
+        {'entry_price': 100, 'exit_price': 110, 'profit': 10},
+        {'entry_price': 50, 'exit_price': 45, 'profit': -5}
+    ]
+
+    # Test performance analysis
+    performance = analyze_trade_performance(trades)
+
+    # Check performance metrics
+    assert 'total_trades' in performance
+    assert 'win_rate' in performance
+    assert 'total_profit' in performance
+    assert performance['total_trades'] == 2
+    assert isinstance(performance['win_rate'], float)
+    assert isinstance(performance['total_profit'], float)
