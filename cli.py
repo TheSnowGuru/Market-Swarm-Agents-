@@ -155,10 +155,6 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
-import logging
-import vectorbt as vbt
-import pandas as pd
-from agents.base_agent import BaseAgent
 
 class OptimalTradeAgent(BaseAgent):
     def __init__(self, config=None):
