@@ -43,6 +43,9 @@ AGENT_CONFIGS = {
     }
 }
 
+# Add Correlation Agent Configuration
+CORRELATION_AGENT_CONFIG = AGENT_CONFIGS['correlation']
+
 # Data Configuration
 DATA_CONFIG = {
     'historical_data_path': r'C:\Projects\market_swarm_agents\data\price_data\btcusd\BTCUSD_1m_Bitstamp.csv',
