@@ -136,6 +136,19 @@ def test():
     result = pytest.main(['-v', 'tests'])
     sys.exit(result)
 
+@swarm.command(name='list-agents')
+def list_agents():
+    """List available trading agents"""
+    agents = [
+        'ScalperAgent',
+        'TrendFollowerAgent', 
+        'CorrelationAgent', 
+        'OptimalTradeAgent'
+    ]
+    click.echo("Available Trading Agents:")
+    for agent in agents:
+        click.echo(f"- {agent}")
+
 if __name__ == '__main__':
     try:
         swarm()
