@@ -4,6 +4,7 @@ import sys
 import pandas as pd
 from master_agent.master_agent import MasterAgent
 from shared.data_handler import DataHandler
+from agents.base_agent import BaseAgent
 from agents.scalper_agent import ScalperAgent
 from agents.trend_follower_agent import TrendFollowerAgent
 from agents.correlation_agent import CorrelationAgent
