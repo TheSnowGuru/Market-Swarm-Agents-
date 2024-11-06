@@ -90,19 +90,4 @@ def get_samples_in_leaf(tree, node_id):
         list: Indices of samples.
     """
     return tree.tree_.value[node_id].flatten()
-    """
-    Get the indices of samples that reach the given leaf node.
-    
-    Parameters:
-        tree: The decision tree.
-        node_id: The node ID of the leaf.
-        X_train: Training data used to build the tree.
-        
-    Returns:
-        list: Indices of samples.
-    """
-    # Initialize the list of node indicators
-    indicators = tree.decision_path(X_train)
-    sample_ids = indicators[:, node_id].nonzero()[0]
-    return sample_ids
 
