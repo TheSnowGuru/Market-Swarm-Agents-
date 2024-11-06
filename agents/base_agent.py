@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 import vectorbt as vbt
 import numpy as np
 from shared.feature_extractor import calculate_indicators
-from shared.vectorbt_utils import run_backtest
 
 class BaseAgent(ABC):
     def __init__(self, name):
@@ -42,8 +41,8 @@ class OptimalTradeAgent(BaseAgent):
         # Preprocess data with technical indicators
         processed_data = calculate_indicators(data)
         
-        # Run backtesting
-        self.backtest_results = run_backtest(processed_data, self.config)
+        # TODO: Implement backtesting logic
+        self.backtest_results = None
 
     def get_backtest_performance(self):
         return self.backtest_results
