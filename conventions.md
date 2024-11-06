@@ -307,3 +307,193 @@ class OptimalTradeAgent(BaseAgent):
         """
         # Placeholder for live trading logic
         pass
+import pandas as pd
+import numpy as np
+import vectorbt as vbt
+from typing import Dict, Any, Optional
+
+from agents.base_agent import BaseAgent
+from shared.data_handler import DataHandler
+from shared.rule_derivation import derive_optimal_trade_rules
+from shared.event_stream import EventStream
+import config
+
+class OptimalTradeAgent(BaseAgent):
+    def __init__(self, name: str = "OptimalTradeAgent", config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the Optimal Trade Agent with configurable parameters.
+        
+        Args:
+            name (str): Name of the agent
+            config (dict): Configuration dictionary for the agent
+        """
+        super().__init__(name)
+        self.config = config or config.OPTIMAL_TRADE_CONFIG
+        self.event_stream = EventStream()
+        self.data_handler = DataHandler(config.DATA_CONFIG)
+        
+        # Trading parameters
+        self.initial_capital = self.config.get('risk_management', {}).get('initial_capital', 10000)
+        self.max_trade_amount = self.config.get('risk_management', {}).get('max_trade_amount', 1000)
+        self.max_daily_loss = self.config.get('risk_management', {}).get('max_daily_loss', 0.03)
+        
+        # Machine learning model configuration
+        self.ml_model_config = self.config.get('ml_model', {})
+        
+        # Trading rules and model
+        self.trading_rules = None
+        self.ml_model = None
+        self.scaler = None
+    
+    def prepare_trading_rules(self, labeled_data: pd.DataFrame):
+        """
+        Derive trading rules from labeled data using machine learning.
+        
+        Args:
+            labeled_data (pd.DataFrame): Labeled market data
+        """
+        try:
+            rule_derivation_result = derive_optimal_trade_rules(
+                labeled_data, 
+                test_size=0.2, 
+                random_state=42
+            )
+            
+            self.trading_rules = rule_derivation_result['rules']
+            self.ml_model = rule_derivation_result['model']
+            self.scaler = rule_derivation_result['scaler']
+            
+            # Log model performance
+            self.event_stream.log_event(
+                f"{self.name} Trading Rules Derived",
+                extra_data={
+                    'train_accuracy': rule_derivation_result['train_accuracy'],
+                    'test_accuracy': rule_derivation_result['test_accuracy']
+                }
+            )
+        except Exception as e:
+            self.event_stream.log_event(
+                f"Error deriving trading rules for {self.name}",
+                level='ERROR',
+                extra_data={'error': str(e)}
+            )
+            raise
+    
+    def run_backtest(self, historical_data: pd.DataFrame):
+        """
+        Run a comprehensive backtest using Vectorbt.
+        
+        Args:
+            historical_data (pd.DataFrame): Historical market data
+        
+        Returns:
+            dict: Backtest performance metrics
+        """
+        try:
+            # Prepare entry and exit signals
+            entries, exits = self._generate_signals(historical_data)
+            
+            # Run portfolio simulation
+            portfolio = vbt.Portfolio.from_signals(
+                historical_data['Close'],
+                entries,
+                exits,
+                init_cash=self.initial_capital,
+                fees=0.001,  # 0.1% trading fee
+                sl_stop=self.config.get('stop_loss', 0.02),
+                tp_stop=self.config.get('target_yield', 0.05)
+            )
+            
+            # Calculate performance metrics
+            total_return = portfolio.total_return()
+            sharpe_ratio = portfolio.sharpe_ratio()
+            max_drawdown = portfolio.max_drawdown()
+            win_rate = portfolio.win_rate()
+            
+            performance_metrics = {
+                'total_return': total_return,
+                'sharpe_ratio': sharpe_ratio,
+                'max_drawdown': max_drawdown,
+                'win_rate': win_rate,
+                'trades': len(portfolio.trades)
+            }
+            
+            # Log backtest results
+            self.event_stream.log_event(
+                f"{self.name} Backtest Completed",
+                extra_data=performance_metrics
+            )
+            
+            return performance_metrics
+        
+        except Exception as e:
+            self.event_stream.log_event(
+                f"Backtest failed for {self.name}",
+                level='ERROR',
+                extra_data={'error': str(e)}
+            )
+            raise
+    
+    def _generate_signals(self, historical_data: pd.DataFrame):
+        """
+        Generate entry and exit signals based on trading rules.
+        
+        Args:
+            historical_data (pd.DataFrame): Historical market data
+        
+        Returns:
+            tuple: Entry and exit signals
+        """
+        # Placeholder implementation
+        # In a real scenario, this would use the derived trading rules
+        entries = pd.Series(False, index=historical_data.index)
+        exits = pd.Series(False, index=historical_data.index)
+        
+        return entries, exits
+    
+    def trade(self, market_data: pd.DataFrame):
+        """
+        Execute trading logic for live trading.
+        
+        Args:
+            market_data (pd.DataFrame): Current market data
+        """
+        # Placeholder for live trading implementation
+        pass
+    
+    def get_performance(self):
+        """
+        Get the agent's performance metric.
+        
+        Returns:
+            float: Performance score
+        """
+        # Implement performance calculation logic
+        return 0.0
+    
+    def run(self):
+        """
+        Main method to run the agent's trading strategy.
+        """
+        try:
+            # Load historical data
+            historical_data = self.data_handler.load_historical_data(
+                symbol='BTC/USDT',  # Example symbol
+                timeframe=self.config.get('timeframe', '5m')
+            )
+            
+            # Prepare trading rules
+            self.prepare_trading_rules(historical_data)
+            
+            # Run backtest
+            backtest_results = self.run_backtest(historical_data)
+            
+            return backtest_results
+        
+        except Exception as e:
+            self.event_stream.log_event(
+                f"{self.name} Execution Failed",
+                level='ERROR',
+                extra_data={'error': str(e)}
+            )
+            raise
