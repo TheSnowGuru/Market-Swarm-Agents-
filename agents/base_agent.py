@@ -126,14 +126,12 @@ import numpy as np
 from agents.base_agent import BaseAgent
 from shared.feature_extractor import calculate_indicators
 from shared.vectorbt_utils import run_backtest
-from shared.pyalgotrade_utils import create_pyalgotrade_strategy
 
 class OptimalTradeAgent(BaseAgent):
     def __init__(self, name, config):
         super().__init__(name)
         self.config = config
         self.backtest_results = None
-        self.live_strategy = None
 
     def analyze(self):
         # Implement analysis using technical indicators
@@ -149,9 +147,6 @@ class OptimalTradeAgent(BaseAgent):
         
         # Run backtesting
         self.backtest_results = run_backtest(processed_data, self.config)
-        
-        # Prepare live trading strategy
-        self.live_strategy = create_pyalgotrade_strategy(processed_data)
 
     def get_backtest_performance(self):
         return self.backtest_results
