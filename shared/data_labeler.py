@@ -7,6 +7,23 @@ def generate_optimal_trades(
         stop_loss=0.02):
     """
     Label trades as optimal based on target yield, time period, stop-loss, and optional volatility threshold.
+    """
+    # Validate input data
+    if data.empty:
+        raise ValueError("Input data cannot be empty")
+    
+    if 'Close' not in data.columns:
+        raise ValueError("Input data must contain 'Close' column")
+        
+    if max_volatility is not None and 'Volatility' not in data.columns:
+        raise ValueError("Input data must contain 'Volatility' column when max_volatility is specified")
+    
+    # Validate timeframe
+    valid_timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
+    if timeframe not in valid_timeframes:
+        raise ValueError(f"Invalid timeframe. Must be one of {valid_timeframes}")
+    """
+    Label trades as optimal based on target yield, time period, stop-loss, and optional volatility threshold.
     
     Parameters:
         data (pd.DataFrame): DataFrame containing 'Close' and optionally 'Volatility' columns.
