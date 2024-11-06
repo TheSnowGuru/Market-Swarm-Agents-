@@ -45,11 +45,11 @@ AGENT_CONFIGS = {
 
 # Data Configuration
 DATA_CONFIG = {
-    'historical_data_path': str(DATA_DIR / 'shared_data' / 'historical_data.csv'),
+    'historical_data_path': r'C:\Projects\market_swarm_agents\data\price_data\btcusd\BTCUSD_1m_Bitstamp.csv',
     'event_log_path': str(DATA_DIR / 'events_data' / 'event_log.csv'),
     'data_sources': {
-        'primary': 'yahoo_finance',
-        'backup': 'alpha_vantage'
+        'primary': 'bitstamp',
+        'symbol': 'BTC/USDT'
     }
 }
 

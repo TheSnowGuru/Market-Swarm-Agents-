@@ -19,14 +19,16 @@ class DataHandler:
         self.exchange = None
 
     def load_historical_data(self, 
-                              symbol: str, 
+                              file_path: str = None, 
+                              symbol: str = None, 
                               timeframe: str = '5m', 
                               start_date: Optional[datetime] = None) -> pd.DataFrame:
         """
         Load historical market data for backtesting
         
         Args:
-            symbol (str): Trading symbol (e.g., 'BTC/USDT')
+            file_path (str, optional): Direct path to CSV file
+            symbol (str, optional): Trading symbol (e.g., 'BTC/USDT')
             timeframe (str): Candle timeframe ('5m', '15m', '1h', etc.)
             start_date (datetime, optional): Start date for historical data
         
@@ -34,7 +36,13 @@ class DataHandler:
             pd.DataFrame: Historical market data
         """
         try:
-            # Use yfinance for stock data
+            # If file path is provided, load directly from CSV
+            if file_path:
+                df = pd.read_csv(file_path, parse_dates=['Open time'])
+                df.set_index('Open time', inplace=True)
+                return df
+            
+            # Fallback to existing methods if symbol is provided
             if '/' not in symbol:
                 if not start_date:
                     start_date = datetime.now() - timedelta(days=365)
@@ -64,7 +72,7 @@ class DataHandler:
             return df
         
         except Exception as e:
-            self.logger.error(f"Error loading historical data for {symbol}: {e}")
+            self.logger.error(f"Error loading historical data: {e}")
             return pd.DataFrame()
 
     def get_real_time_data(self, symbol: str, timeframe: str = '5m') -> pd.DataFrame:

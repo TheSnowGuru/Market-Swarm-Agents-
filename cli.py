@@ -43,7 +43,7 @@ def run(strategy, data, config):
     
     # Load data
     data_handler = DataHandler({})
-    market_data = data_handler.load_historical_data(data)
+    market_data = data_handler.load_historical_data(file_path=data)
     
     # Select and add agents based on strategy
     agent_configs = {
