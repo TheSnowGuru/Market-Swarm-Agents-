@@ -1,4 +1,9 @@
 from abc import ABC, abstractmethod
+import vectorbt as vbt
+import numpy as np
+from agents.base_agent import BaseAgent
+from shared.feature_extractor import calculate_indicators
+from shared.vectorbt_utils import run_backtest
 
 class BaseAgent(ABC):
     def __init__(self, name):
@@ -19,11 +24,7 @@ class BaseAgent(ABC):
     @abstractmethod
     def train(self, data):
         pass
-import vectorbt as vbt
-import numpy as np
-from agents.base_agent import BaseAgent
-from shared.feature_extractor import calculate_indicators
-from shared.vectorbt_utils import run_backtest
+
 
 
 class OptimalTradeAgent(BaseAgent):
@@ -82,8 +83,6 @@ def run_backtest(data, config):
         'sharpe_ratio': portfolio.sharpe_ratio(),
         'max_drawdown': portfolio.max_drawdown()
     }
-from pyalgotrade import strategy
-from pyalgotrade.barfeed import csvfeed
 
 def create_pyalgotrade_strategy(data):
     """
