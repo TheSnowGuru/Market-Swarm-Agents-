@@ -1,27 +1,17 @@
 # shared/data_labeler.py
 
 import pandas as pd
+import numpy as np
+from typing import Optional
 
 def generate_optimal_trades(
-        data, timeframe='5m', target_yield=0.05, time_period=12, max_volatility=None,
-        stop_loss=0.02):
-    """
-    Label trades as optimal based on target yield, time period, stop-loss, and optional volatility threshold.
-    """
-    # Validate input data
-    if data.empty:
-        raise ValueError("Input data cannot be empty")
-    
-    if 'Close' not in data.columns:
-        raise ValueError("Input data must contain 'Close' column")
-        
-    if max_volatility is not None and 'Volatility' not in data.columns:
-        raise ValueError("Input data must contain 'Volatility' column when max_volatility is specified")
-    
-    # Validate timeframe
-    valid_timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
-    if timeframe not in valid_timeframes:
-        raise ValueError(f"Invalid timeframe. Must be one of {valid_timeframes}")
+        data: pd.DataFrame, 
+        timeframe: str = '5m', 
+        target_yield: float = 0.05, 
+        time_period: int = 12, 
+        max_volatility: Optional[float] = None,
+        stop_loss: float = 0.02
+) -> pd.DataFrame:
     """
     Label trades as optimal based on target yield, time period, stop-loss, and optional volatility threshold.
     
@@ -54,20 +44,7 @@ def generate_optimal_trades(
     valid_timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
     if timeframe not in valid_timeframes:
         raise ValueError(f"Invalid timeframe. Must be one of {valid_timeframes}")
-    """
-    Label trades as optimal based on target yield, time period, stop-loss, and optional volatility threshold.
-    
-    Parameters:
-        data (pd.DataFrame): DataFrame containing 'Close' and optionally 'Volatility' columns.
-        timeframe (str): The timeframe of the data (e.g., '5m', '15m', '1h').
-        target_yield (float): The return threshold to consider a trade as optimal (e.g., 0.05 for 5%).
-        time_period (int): The number of intervals within which the target yield must be achieved.
-        max_volatility (float, optional): Maximum allowed volatility to consider a trade as optimal.
-        stop_loss (float): Maximum allowed loss from the entry price (e.g., 0.02 for 2%).
-        
-    Returns:
-        pd.DataFrame: A copy of the input data with an additional column 'Optimal Trade'.
-    """
+
     # Create a copy to avoid modifying the original data
     labeled_data = data.copy()
     labeled_data['Optimal Trade'] = 0  # Initialize the 'Optimal Trade' column
