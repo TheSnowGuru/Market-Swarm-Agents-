@@ -142,3 +142,87 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
+import logging
+import vectorbt as vbt
+import pandas as pd
+from agents.base_agent import BaseAgent
+
+class OptimalTradeAgent(BaseAgent):
+    def __init__(self, config=None):
+        """
+        Initialize OptimalTradeAgent with optional configuration
+
+        Args:
+            config (dict, optional): Configuration parameters for the optimal trade agent
+        """
+        super().__init__("OptimalTradeAgent")
+        self.config = config or {}
+        self.logger = logging.getLogger(__name__)
+        self.backtest_results = None
+
+    def train(self, market_data):
+        """
+        Train the agent using market data
+
+        Args:
+            market_data (pd.DataFrame): Historical market data
+        """
+        self.logger.info("Training OptimalTradeAgent")
+        # Implement training logic using Vectorbt
+        pass
+
+    def backtest(self, market_data):
+        """
+        Perform backtesting on the market data
+
+        Args:
+            market_data (pd.DataFrame): Historical market data
+
+        Returns:
+            dict: Backtesting performance metrics
+        """
+        self.logger.info("Performing backtest for OptimalTradeAgent")
+        
+        # Example Vectorbt backtesting
+        close_prices = market_data['Close']
+        
+        # Simple moving average crossover strategy
+        sma_fast = vbt.SMA.run(close_prices, window=10)
+        sma_slow = vbt.SMA.run(close_prices, window=50)
+        
+        entries = sma_fast.close_above(sma_slow)
+        exits = sma_fast.close_below(sma_slow)
+        
+        portfolio = vbt.Portfolio.from_signals(
+            close_prices, 
+            entries, 
+            exits, 
+            init_cash=10000
+        )
+        
+        self.backtest_results = {
+            'total_return': portfolio.total_return(),
+            'sharpe_ratio': portfolio.sharpe_ratio(),
+            'max_drawdown': portfolio.max_drawdown(),
+        }
+        
+        return self.backtest_results
+
+    def save_model(self, output_path):
+        """
+        Save the trained model
+
+        Args:
+            output_path (str): Path to save the model
+        """
+        self.logger.info(f"Saving model to {output_path}")
+        # Implement model saving logic
+        pass
+
+    def run(self):
+        """
+        Execute the trading strategy
+        """
+        self.logger.info("Running OptimalTradeAgent")
+        # Implement real-time trading logic
+        pass
