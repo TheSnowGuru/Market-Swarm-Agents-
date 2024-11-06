@@ -567,3 +567,234 @@ def test_agent_run(sample_historical_data):
     assert results is not None
     assert 'total_return' in results
     assert 'sharpe_ratio' in results
+import pandas as pd
+import numpy as np
+import vectorbt as vbt
+import logging
+from typing import Dict, Any, Optional, Tuple
+
+from agents.base_agent import BaseAgent
+from shared.data_handler import DataHandler
+from shared.data_labeler import generate_optimal_trades
+from shared.rule_derivation import derive_optimal_trade_rules
+from shared.event_stream import EventStream
+from utils.vectorbt_utils import simulate_trading_strategy
+
+import config
+
+class OptimalTradeAgent(BaseAgent):
+    def __init__(
+        self, 
+        name: str = "OptimalTradeAgent", 
+        config: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Initialize the Optimal Trade Agent with configurable parameters.
+        
+        Args:
+            name (str): Name of the agent
+            config (dict): Configuration dictionary for the agent
+        """
+        super().__init__(name)
+        
+        # Use provided config or default to global config
+        self.config = config or config.OPTIMAL_TRADE_CONFIG
+        
+        # Initialize core components
+        self.logger = logging.getLogger(__name__)
+        self.event_stream = EventStream()
+        self.data_handler = DataHandler(config.DATA_CONFIG)
+        
+        # Trading parameters
+        self.initial_capital = self.config.get('risk_management', {}).get('initial_capital', 10000)
+        self.max_trade_amount = self.config.get('risk_management', {}).get('max_trade_amount', 1000)
+        self.max_daily_loss = self.config.get('risk_management', {}).get('max_daily_loss', 0.03)
+        
+        # Machine learning model configuration
+        self.ml_model_config = self.config.get('ml_model', {})
+        
+        # Trading rules and model
+        self.trading_rules = None
+        self.ml_model = None
+        self.scaler = None
+        
+        # Performance tracking
+        self.performance_history = []
+    
+    def prepare_trading_rules(self, historical_data: pd.DataFrame) -> None:
+        """
+        Derive trading rules from labeled market data.
+        
+        Args:
+            historical_data (pd.DataFrame): Historical market data
+        """
+        try:
+            # Label data for optimal trades
+            labeled_data = generate_optimal_trades(
+                historical_data,
+                timeframe=self.config.get('timeframe', '5m'),
+                target_yield=self.config.get('target_yield', 0.05),
+                time_period=self.config.get('time_period', 12),
+                stop_loss=self.config.get('stop_loss', 0.02)
+            )
+            
+            # Derive trading rules
+            rule_derivation_result = derive_optimal_trade_rules(labeled_data)
+            
+            self.trading_rules = rule_derivation_result['rules']
+            self.ml_model = rule_derivation_result['model']
+            self.scaler = rule_derivation_result['scaler']
+            
+            # Log model performance
+            self.event_stream.log_event(
+                f"{self.name} Trading Rules Derived",
+                extra_data={
+                    'train_accuracy': rule_derivation_result['train_accuracy'],
+                    'test_accuracy': rule_derivation_result['test_accuracy']
+                }
+            )
+        except Exception as e:
+            self.event_stream.log_event(
+                f"Error deriving trading rules for {self.name}",
+                level='ERROR',
+                extra_data={'error': str(e)}
+            )
+            raise
+    
+    def generate_trade_signals(
+        self, 
+        historical_data: pd.DataFrame
+    ) -> Tuple[pd.Series, pd.Series]:
+        """
+        Generate entry and exit signals based on trading rules.
+        
+        Args:
+            historical_data (pd.DataFrame): Historical market data
+        
+        Returns:
+            Tuple of entry and exit signals
+        """
+        if self.ml_model is None or self.scaler is None:
+            raise ValueError("Trading rules must be prepared before generating signals")
+        
+        # Prepare features
+        features = historical_data.select_dtypes(include=['int64', 'float64'])
+        scaled_features = self.scaler.transform(features)
+        
+        # Predict optimal trades
+        predictions = self.ml_model.predict(scaled_features)
+        
+        # Convert predictions to entry and exit signals
+        entries = pd.Series(predictions == 1, index=historical_data.index)
+        exits = pd.Series(predictions == 0, index=historical_data.index)
+        
+        return entries, exits
+    
+    def run_backtest(self, historical_data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Run a comprehensive backtest using Vectorbt.
+        
+        Args:
+            historical_data (pd.DataFrame): Historical market data
+        
+        Returns:
+            dict: Backtest performance metrics
+        """
+        try:
+            # Prepare trading rules
+            self.prepare_trading_rules(historical_data)
+            
+            # Generate trade signals
+            entries, exits = self.generate_trade_signals(historical_data)
+            
+            # Simulate trading strategy
+            performance_metrics = simulate_trading_strategy(
+                historical_data, 
+                entries, 
+                exits
+            )
+            
+            # Log backtest results
+            self.event_stream.log_event(
+                f"{self.name} Backtest Completed",
+                extra_data=performance_metrics
+            )
+            
+            # Update performance history
+            self.performance_history.append(performance_metrics['total_return'])
+            
+            return performance_metrics
+        
+        except Exception as e:
+            self.event_stream.log_event(
+                f"Backtest failed for {self.name}",
+                level='ERROR',
+                extra_data={'error': str(e)}
+            )
+            raise
+    
+    def trade(self, market_data: pd.DataFrame) -> None:
+        """
+        Execute live trading logic.
+        
+        Args:
+            market_data (pd.DataFrame): Current market data
+        """
+        try:
+            # Check if trading rules are prepared
+            if self.ml_model is None:
+                raise ValueError("Trading rules must be prepared before live trading")
+            
+            # Generate trade signals
+            entries, exits = self.generate_trade_signals(market_data)
+            
+            # Implement live trading logic here
+            # This would involve connecting to a broker API, executing trades, etc.
+            pass
+        
+        except Exception as e:
+            self.event_stream.log_event(
+                f"{self.name} Live Trading Error",
+                level='ERROR',
+                extra_data={'error': str(e)}
+            )
+    
+    def get_performance(self) -> float:
+        """
+        Calculate the agent's overall performance.
+        
+        Returns:
+            float: Performance score
+        """
+        if not self.performance_history:
+            return 0.0
+        
+        # Simple performance metric: average of total returns
+        return np.mean(self.performance_history)
+    
+    def run(self) -> Dict[str, Any]:
+        """
+        Main method to run the agent's trading strategy.
+        
+        Returns:
+            dict: Backtest or trading results
+        """
+        try:
+            # Load historical data
+            historical_data = self.data_handler.load_historical_data(
+                symbol='BTC/USDT',  # Example symbol
+                timeframe=self.config.get('timeframe', '5m')
+            )
+            
+            # Run backtest
+            backtest_results = self.run_backtest(historical_data)
+            
+            return backtest_results
+        
+        except Exception as e:
+            self.event_stream.log_event(
+                f"{self.name} Execution Failed",
+                level='ERROR',
+                extra_data={'error': str(e)}
+            )
+            raise
