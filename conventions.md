@@ -497,3 +497,73 @@ class OptimalTradeAgent(BaseAgent):
                 extra_data={'error': str(e)}
             )
             raise
+import pytest
+import pandas as pd
+import numpy as np
+from agents.optimal_trade_agent import OptimalTradeAgent
+import config
+
+@pytest.fixture
+def sample_historical_data():
+    """Create sample historical market data for testing."""
+    dates = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
+    np.random.seed(42)
+    
+    data = pd.DataFrame({
+        'Close': np.random.normal(100, 10, len(dates)) + np.sin(np.arange(len(dates))),
+        'Open': np.random.normal(100, 10, len(dates)) + np.sin(np.arange(len(dates))),
+        'High': np.random.normal(105, 10, len(dates)) + np.sin(np.arange(len(dates))),
+        'Low': np.random.normal(95, 10, len(dates)) + np.sin(np.arange(len(dates)))
+    }, index=dates)
+    
+    return data
+
+def test_optimal_trade_agent_initialization():
+    """Test agent initialization with default configuration."""
+    agent = OptimalTradeAgent()
+    
+    assert agent.name == "OptimalTradeAgent"
+    assert agent.initial_capital == 10000
+    assert agent.max_trade_amount == 1000
+    assert agent.max_daily_loss == 0.03
+
+def test_prepare_trading_rules(sample_historical_data):
+    """Test trading rules preparation."""
+    agent = OptimalTradeAgent()
+    
+    # Add a label column for testing
+    sample_historical_data['Optimal Trade'] = np.random.choice([0, 1], size=len(sample_historical_data))
+    
+    agent.prepare_trading_rules(sample_historical_data)
+    
+    assert agent.trading_rules is not None
+    assert agent.ml_model is not None
+    assert agent.scaler is not None
+
+def test_run_backtest(sample_historical_data):
+    """Test backtest method."""
+    agent = OptimalTradeAgent()
+    
+    # Add a label column for testing
+    sample_historical_data['Optimal Trade'] = np.random.choice([0, 1], size=len(sample_historical_data))
+    
+    backtest_results = agent.run_backtest(sample_historical_data)
+    
+    assert 'total_return' in backtest_results
+    assert 'sharpe_ratio' in backtest_results
+    assert 'max_drawdown' in backtest_results
+    assert 'win_rate' in backtest_results
+    assert 'trades' in backtest_results
+
+def test_agent_run(sample_historical_data):
+    """Test full agent run method."""
+    agent = OptimalTradeAgent()
+    
+    # Patch data_handler to return sample data
+    agent.data_handler.load_historical_data = lambda *args, **kwargs: sample_historical_data
+    
+    results = agent.run()
+    
+    assert results is not None
+    assert 'total_return' in results
+    assert 'sharpe_ratio' in results
