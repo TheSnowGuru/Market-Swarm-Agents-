@@ -197,3 +197,113 @@ market_swarm_agents/
 
 - **Run the Application**: Use `cli.py` to run the `optimal_trade_agent` and test the strategy in both backtesting and live trading modes.
 
+import pandas as pd
+import vectorbt as vbt
+from shared.event_stream import EventStream
+from agents.base_agent import BaseAgent
+
+class OptimalTradeAgent(BaseAgent):
+    def __init__(self, name, config):
+        """
+        Initialize the Optimal Trade Agent
+        
+        Parameters:
+            name (str): Name of the agent
+            config (dict): Configuration dictionary containing:
+                - trading_rules: Rules derived from rule_derivation
+                - backtest_config: Backtest-specific configurations
+        """
+        super().__init__(name)
+        self.trading_rules = config.get('trading_rules', {})
+        self.backtest_config = config.get('backtest_config', {})
+        self.event_stream = EventStream()
+    
+    def run_backtest(self, historical_data):
+        """
+        Run backtest using Vectorbt
+        
+        Parameters:
+            historical_data (pd.DataFrame): Historical market data
+        
+        Returns:
+            dict: Backtest results and performance metrics
+        """
+        # Validate input
+        if historical_data is None or historical_data.empty:
+            raise ValueError("Historical data cannot be empty")
+        
+        # Extract price data
+        close_prices = historical_data['Close']
+        
+        # Configure backtest parameters
+        entries = self._generate_entry_signals(historical_data)
+        exits = self._generate_exit_signals(historical_data)
+        
+        # Run portfolio simulation
+        portfolio = vbt.Portfolio.from_signals(
+            close_prices,
+            entries,
+            exits,
+            init_cash=self.backtest_config.get('initial_cash', 10000),
+            fees=self.backtest_config.get('fees', 0.001),
+            sl_stop=self.backtest_config.get('stop_loss', 0.02),
+            tp_stop=self.backtest_config.get('take_profit', 0.05)
+        )
+        
+        # Collect performance metrics
+        total_return = portfolio.total_return()
+        sharpe_ratio = portfolio.sharpe_ratio()
+        max_drawdown = portfolio.max_drawdown()
+        
+        # Log backtest results
+        backtest_results = {
+            'total_return': total_return,
+            'sharpe_ratio': sharpe_ratio,
+            'max_drawdown': max_drawdown,
+            'trades': portfolio.trades
+        }
+        
+        self.event_stream.log_event(
+            f"Backtest completed for {self.name}",
+            extra_data=backtest_results
+        )
+        
+        return backtest_results
+    
+    def _generate_entry_signals(self, historical_data):
+        """
+        Generate entry signals based on trading rules
+        
+        Parameters:
+            historical_data (pd.DataFrame): Historical market data
+        
+        Returns:
+            pd.Series: Boolean series indicating entry points
+        """
+        # Placeholder implementation
+        # In a real scenario, this would use the trading rules from rule_derivation
+        return pd.Series(False, index=historical_data.index)
+    
+    def _generate_exit_signals(self, historical_data):
+        """
+        Generate exit signals based on trading rules
+        
+        Parameters:
+            historical_data (pd.DataFrame): Historical market data
+        
+        Returns:
+            pd.Series: Boolean series indicating exit points
+        """
+        # Placeholder implementation
+        # In a real scenario, this would use the trading rules from rule_derivation
+        return pd.Series(False, index=historical_data.index)
+    
+    def trade(self, market_data):
+        """
+        Execute trading logic based on current market data
+        
+        Parameters:
+            market_data (pd.DataFrame): Current market data
+        """
+        # Placeholder for live trading logic
+        pass

@@ -91,3 +91,79 @@ def get_samples_in_leaf(tree, node_id):
     """
     return tree.tree_.value[node_id].flatten()
 
+import pandas as pd
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+def derive_optimal_trade_rules(labeled_data, test_size=0.2, random_state=42):
+    """
+    Derive trading rules from labeled data using a Decision Tree Classifier.
+    
+    Parameters:
+        labeled_data (pd.DataFrame): DataFrame with features and 'Optimal Trade' column
+        test_size (float): Proportion of data to use for testing
+        random_state (int): Seed for reproducibility
+    
+    Returns:
+        dict: A dictionary containing trading rules, model performance, and feature importances
+    """
+    # Validate input
+    if labeled_data is None or labeled_data.empty:
+        raise ValueError("Input data cannot be empty")
+    
+    # Separate features and target
+    features = labeled_data.drop('Optimal Trade', axis=1)
+    target = labeled_data['Optimal Trade']
+    
+    # Remove non-numeric columns
+    features = features.select_dtypes(include=['int64', 'float64'])
+    
+    # Split the data
+    X_train, X_test, y_train, y_test = train_test_split(
+        features, target, 
+        test_size=test_size, 
+        random_state=random_state, 
+        stratify=target
+    )
+    
+    # Scale features
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    # Train Decision Tree Classifier
+    clf = DecisionTreeClassifier(
+        max_depth=5,  # Limit depth to prevent overfitting
+        min_samples_split=20,  # Ensure meaningful splits
+        random_state=random_state
+    )
+    clf.fit(X_train_scaled, y_train)
+    
+    # Evaluate the model
+    train_score = clf.score(X_train_scaled, y_train)
+    test_score = clf.score(X_test_scaled, y_test)
+    
+    # Extract feature importances
+    feature_importances = pd.DataFrame({
+        'feature': features.columns,
+        'importance': clf.feature_importances_
+    }).sort_values('importance', ascending=False)
+    
+    # Extract rules (simplified representation)
+    rules = []
+    for feature, importance in zip(feature_importances['feature'], feature_importances['importance']):
+        if importance > 0.1:  # Only consider significant features
+            rules.append({
+                'feature': feature,
+                'importance': importance
+            })
+    
+    return {
+        'model': clf,
+        'scaler': scaler,
+        'rules': rules,
+        'train_accuracy': train_score,
+        'test_accuracy': test_score,
+        'feature_importances': feature_importances
+    }
