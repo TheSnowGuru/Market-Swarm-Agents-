@@ -8,7 +8,7 @@ from agents.base_agent import BaseAgent
 from agents.scalper_agent import ScalperAgent
 from agents.trend_follower_agent import TrendFollowerAgent
 from agents.correlation_agent import CorrelationAgent
-from agents.optimal_trade_agent import OptimalTradeAgent
+from optimal_trade_agent import OptimalTradeAgent
 from config import (
     SCALPER_AGENT_CONFIG, 
     TREND_FOLLOWER_AGENT_CONFIG, 

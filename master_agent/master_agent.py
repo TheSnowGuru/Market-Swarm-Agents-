@@ -1,4 +1,4 @@
-from agents.optimal_trade_agent import OptimalTradeAgent
+from optimal_trade_agent import OptimalTradeAgent
 from agents.correlation_agent import CorrelationAgent
 from agents.scalper_agent import ScalperAgent
 from agents.trend_follower_agent import TrendFollowerAgent

@@ -2,7 +2,7 @@ from master_agent.master_agent import MasterAgent
 from agents.scalper_agent import ScalperAgent
 from agents.trend_follower_agent import TrendFollowerAgent
 from agents.correlation_agent import CorrelationAgent
-from agents.optimal_trade_agent import OptimalTradeAgent
+from optimal_trade_agent import OptimalTradeAgent
 from shared.data_handler import DataHandler
 from shared.data_labeler import generate_optimal_trades
 from shared.rule_derivation import derive_optimal_trade_rules
