@@ -137,4 +137,26 @@ def test():
     sys.exit(result)
 
 if __name__ == '__main__':
-    swarm()
+    try:
+        swarm()
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+from setuptools import setup, find_packages
+
+setup(
+    name='market-swarm',
+    version='0.1.0',
+    packages=find_packages(),
+    install_requires=[
+        'click',
+        'pandas',
+        'pytest',
+        # Add other dependencies from your project
+    ],
+    entry_points={
+        'console_scripts': [
+            'swarm=cli:swarm',
+        ],
+    },
+)
