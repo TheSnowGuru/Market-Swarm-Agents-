@@ -3,6 +3,22 @@
 ## Directory Structure
 
 ```
+graph TD
+  A[Historical Data (historical_data.csv)]
+  A --> B[data_handler.py]
+  B --> C[feature_extractor.py]
+  C --> D[Generate Labeled Data (data_labeler.py)]
+  D --> E[Save DataFrame (labeled_data.csv)]
+  E --> F[Derive Optimal Trades (data_labeler.py)]
+  F --> G[Optimize TP: 0.5% & SL: 0.25%]
+  G --> H[Filter Successful Trades (data_labeler.py)]
+  H --> I[Save Optimal Trades Results (optimal_trades.csv)]
+  I --> J[Derive Trading Rules (rule_derivation.py)]
+  J --> K[Map Features to Rules via ML (Decision Tree Classifier)]
+  K --> L[Save Rules (rules.csv)]
+```
+
+```
 market_swarm_agents/
 │
 ├── agents/                    # Trading agent implementations
