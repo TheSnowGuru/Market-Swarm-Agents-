@@ -137,7 +137,7 @@ def test():
     result = pytest.main(['-v', 'tests'])
     sys.exit(result)
 
-@swarm.command(name='list-agents')
+@swarm.command()
 def list_agents():
     """List available trading agents"""
     agents = [
