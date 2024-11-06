@@ -142,21 +142,27 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
+# Removed setup configuration from this file
 from setuptools import setup, find_packages
 
 setup(
-    name='market-swarm',
+    name='market-swarm-agents',
     version='0.1.0',
     packages=find_packages(),
     install_requires=[
         'click',
         'pandas',
         'pytest',
-        # Add other dependencies from your project
+        'pyalgotrade',
+        'logging'
     ],
     entry_points={
         'console_scripts': [
             'swarm=cli:swarm',
         ],
     },
+    author='Your Name',
+    description='Market Swarm Trading Agents',
+    long_description=open('README.md').read() if open('README.md').read() else '',
+    long_description_content_type='text/markdown',
 )
