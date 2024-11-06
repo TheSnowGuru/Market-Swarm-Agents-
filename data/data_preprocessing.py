@@ -13,7 +13,7 @@ def clean_price_data(file_path):
     """
     try:
         # Read the CSV file
-        df = pd.read_csv(file_path, parse_dates=['Timestamp'])
+        df = pd.read_csv(file_path, parse_dates=['Open time'])
         
         # Calculate the number of rows before cleaning
         original_rows = len(df)
