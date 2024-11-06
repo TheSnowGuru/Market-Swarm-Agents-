@@ -2,7 +2,7 @@ import pandas as pd
 import vectorbt as vbt
 from typing import Union
 
-def calculate_indicators(data: Union[pd.DataFrame, vbt.PriceData]) -> Union[pd.DataFrame, vbt.PriceData]:
+def calculate_indicators(data: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate advanced technical indicators using Vectorbt
     
