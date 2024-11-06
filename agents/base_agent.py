@@ -21,11 +21,10 @@ class BaseAgent(ABC):
         pass
 import vectorbt as vbt
 import numpy as np
-from pyalgotrade import strategy
 from agents.base_agent import BaseAgent
 from shared.feature_extractor import calculate_indicators
 from shared.vectorbt_utils import run_backtest
-from shared.pyalgotrade_utils import create_pyalgotrade_strategy
+
 
 class OptimalTradeAgent(BaseAgent):
     def __init__(self, name, config):
