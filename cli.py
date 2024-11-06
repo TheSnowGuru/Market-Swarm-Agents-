@@ -319,10 +319,7 @@ class OptimalTradeAgent(BaseAgent):
         self.logger.info("Running OptimalTradeAgent")
         # Implement real-time trading logic
         pass
-from .optimal_trade_agent import OptimalTradeAgent
-from .scalper_agent import ScalperAgent
-from .trend_follower_agent import TrendFollowerAgent
-from .correlation_agent import CorrelationAgent
+from .base_agent import BaseAgent
 from .optimal_trade_agent import OptimalTradeAgent
 from .scalper_agent import ScalperAgent
 from .trend_follower_agent import TrendFollowerAgent
