@@ -5,9 +5,7 @@ matplotlib==3.8.2
 seaborn==0.13.0
 click==8.1.7
 quantstats==0.0.59
-vectorbt==0.25.0
-pyalgotrade==0.22
-TA-Lib==0.4.20
+vectorbt==0.26.2
 yfinance==0.2.31
 ccxt==3.1.16
 numba==0.59.0
