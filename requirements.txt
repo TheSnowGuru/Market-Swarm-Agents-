@@ -12,8 +12,5 @@ yfinance==0.1.70
 ccxt==1.75.3
 logging==0.5.1.2
 numba==0.54.1
-pytest
-pytest-cov
-scikit-learn
-vectorbt
-TA-Lib
+pytest==6.2.5
+pytest-cov==2.12.1

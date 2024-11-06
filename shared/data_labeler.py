@@ -18,6 +18,38 @@ def generate_optimal_trades(
         
     Returns:
         pd.DataFrame: A copy of the input data with an additional column 'Optimal Trade'.
+        
+    Raises:
+        ValueError: If data is empty or required columns are missing.
+        ValueError: If timeframe is invalid.
+    """
+    # Validate input data
+    if data.empty:
+        raise ValueError("Input data cannot be empty")
+    
+    if 'Close' not in data.columns:
+        raise ValueError("Input data must contain 'Close' column")
+        
+    if max_volatility is not None and 'Volatility' not in data.columns:
+        raise ValueError("Input data must contain 'Volatility' column when max_volatility is specified")
+    
+    # Validate timeframe
+    valid_timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
+    if timeframe not in valid_timeframes:
+        raise ValueError(f"Invalid timeframe. Must be one of {valid_timeframes}")
+    """
+    Label trades as optimal based on target yield, time period, stop-loss, and optional volatility threshold.
+    
+    Parameters:
+        data (pd.DataFrame): DataFrame containing 'Close' and optionally 'Volatility' columns.
+        timeframe (str): The timeframe of the data (e.g., '5m', '15m', '1h').
+        target_yield (float): The return threshold to consider a trade as optimal (e.g., 0.05 for 5%).
+        time_period (int): The number of intervals within which the target yield must be achieved.
+        max_volatility (float, optional): Maximum allowed volatility to consider a trade as optimal.
+        stop_loss (float): Maximum allowed loss from the entry price (e.g., 0.02 for 2%).
+        
+    Returns:
+        pd.DataFrame: A copy of the input data with an additional column 'Optimal Trade'.
     """
     # Create a copy to avoid modifying the original data
     labeled_data = data.copy()

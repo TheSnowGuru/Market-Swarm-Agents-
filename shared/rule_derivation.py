@@ -78,13 +78,14 @@ def extract_rules_with_probabilities(tree, feature_names, X_train, y_train):
     recurse(0, [])
     return paths
 
-def get_samples_in_leaf(tree, node_id):
+def get_samples_in_leaf(tree, node_id, X_train):
     """
     Get the indices of samples that reach the given leaf node.
     
     Parameters:
         tree: The decision tree.
         node_id: The node ID of the leaf.
+        X_train: Training data used to build the tree.
         
     Returns:
         list: Indices of samples.
