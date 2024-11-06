@@ -1,50 +1,31 @@
-Certainly! Here's the detailed file structure of your project, including the files for the data labeler function and the function that derives the rules for optimal trades.
+# Market Swarm Agents Project Structure
 
----
-
-### **Project File Structure**
+## Directory Structure
 
 ```
-project_root/
+market_swarm_agents/
 │
-├── cli.py                     # Command-line interface for running the application
-├── config.py                  # Configuration settings
-├── requirements.txt           # Python package dependencies
-├── run_market_swarm.py        # Main entry point for the market analysis application
+├── agents/                    # Trading agent implementations
+│   ├── base_agent.py         # Abstract base class for all agents
+│   ├── correlation_agent.py  # Correlation-based trading strategy
+│   ├── scalper_agent.py      # Scalping trading strategy
+│   └── trend_follower_agent.py # Trend-following strategy
 │
-├── agents/                    # Directory containing trading agent implementations
-│   ├── base_agent.py               # Abstract base class for all agents
-│   ├── correlation_agent.py        # Agent using correlation-based trading strategy
-│   ├── scalper_agent.py            # Agent using scalping trading strategy
-│   ├── trend_follower_agent.py     # Agent using trend-following strategy
-│   ├── optimal_trade_agent.py      # New agent using the optimal trade labeling strategy
+├── master_agent/             # Agent coordination
+│   └── master_agent.py       # Master agent orchestration
 │
-├── master_agent/              # Directory managing and coordinating multiple trading agents
-│   └── master_agent.py             # Master agent that orchestrates all agents
+├── shared/                   # Shared utilities
+│   ├── data_handler.py      # Data loading and preprocessing
+│   ├── event_stream.py      # Event logging
+│   └── feature_extractor.py # Feature extraction
 │
-├── shared/                    # Shared modules used by agents and other components
-│   ├── data_handler.py             # Handles data loading and preprocessing
-│   ├── event_stream.py             # Manages event logging
-│   ├── feature_extractor.py        # Extracts features from market data
-│   ├── data_labeler.py             # Contains the data labeling function (generate_optimal_trades)
-│   ├── rule_derivation.py          # Contains the function to derive rules for optimal trades
-│   ├── vectorbt_utils.py           # Utility functions for Vectorbt
-│   ├── pyalgotrade_utils.py        # Utility functions for PyAlgoTrade
+├── utils/                    # Utility functions
+│   └── loader.py            # Logging utilities
 │
-├── data/                      # Directory containing data files
-│   ├── events_data/
-│   │   └── event_log.csv           # Logs of trading events
-│   └── shared_data/
-│       └── historical_data.csv     # Historical market data
-│
-├── utils/                     # Additional utility classes and functions
-│   ├── utils.py                    # General utility functions
-│   └── logging_config.py           # Logging configuration
-│
-├── tests/                     # Directory containing unit and integration tests
-│   ├── test_data_labeler.py        # Tests for the data labeler function
-│   ├── test_rule_derivation.py     # Tests for the rule derivation function
-│   └── ...                         # Other test files
+├── cli.py                    # Command-line interface
+├── config.py                 # Configuration settings
+├── run_market_swarm.py       # Main entry point
+└── setup.py                  # Project installation
 ```
 
 ---
