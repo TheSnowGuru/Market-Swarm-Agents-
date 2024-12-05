@@ -1,5 +1,3 @@
-# Configuration for Market Swarm Agents
-
 import os
 from pathlib import Path
 
