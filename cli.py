@@ -173,44 +173,70 @@ def generate_strategy(data, output, profit_threshold, stop_loss):
         )
         from shared.data_handler import DataHandler
         import logging
+        import traceback
 
         logging.info(f"Generating strategy from data: {data}")
         click.echo(f"Loading data from {data}")
+        
+        # Validate input parameters
+        if profit_threshold <= 0 or profit_threshold > 1:
+            raise ValueError("Profit threshold must be between 0 and 1")
+        if stop_loss <= 0 or stop_loss > 1:
+            raise ValueError("Stop loss must be between 0 and 1")
         
         data_handler = DataHandler({})
         market_data = data_handler.load_historical_data(data)
         
         if market_data.empty:
             click.echo("Error: No market data found.")
-            return
+            sys.exit(1)
 
         click.echo("Identifying optimal trades...")
-        optimal_trades = identify_optimal_trades(
-            market_data, 
-            profit_threshold=profit_threshold, 
-            stop_loss=stop_loss
-        )
+        try:
+            optimal_trades = identify_optimal_trades(
+                market_data, 
+                profit_threshold=profit_threshold, 
+                stop_loss=stop_loss
+            )
+        except Exception as e:
+            click.echo(f"Error identifying optimal trades: {e}")
+            logging.error(f"Optimal trades identification failed: {e}", exc_info=True)
+            sys.exit(1)
 
         if optimal_trades.empty:
             click.echo("Warning: No optimal trades identified.")
-            return
+            sys.exit(1)
 
         click.echo("Deriving trading rules...")
-        trading_rules = derive_trading_rules(optimal_trades)
+        try:
+            trading_rules = derive_trading_rules(optimal_trades)
+        except Exception as e:
+            click.echo(f"Error deriving trading rules: {e}")
+            logging.error(f"Trading rules derivation failed: {e}", exc_info=True)
+            sys.exit(1)
 
         click.echo(f"Saving strategy to {output}")
-        save_trading_strategy(trading_rules, output)
+        try:
+            save_trading_strategy(trading_rules, output)
+        except Exception as e:
+            click.echo(f"Error saving trading strategy: {e}")
+            logging.error(f"Strategy saving failed: {e}", exc_info=True)
+            sys.exit(1)
 
         click.echo("Strategy generation complete.")
         logging.info(f"Strategy saved to {output}")
-    
+        
     except Exception as e:
-        click.echo(f"Error generating strategy: {e}")
-        logging.error(f"Strategy generation failed: {e}", exc_info=True)
+        click.echo(f"Unexpected error generating strategy: {e}")
+        logging.error(f"Unexpected strategy generation error: {e}", exc_info=True)
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == '__main__':
     try:
+        # Debug: Print registered commands
+        print("Registered commands:", list(cli.commands.keys()))
+        
         # Ensure all commands are registered before calling
         cli(prog_name='swarm')
     except Exception as e:
