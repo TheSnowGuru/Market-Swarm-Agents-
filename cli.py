@@ -234,8 +234,13 @@ def generate_strategy(data, output, profit_threshold, stop_loss):
 
 if __name__ == '__main__':
     try:
-        # Debug: Print registered commands
-        print("Registered commands:", list(cli.commands.keys()))
+        # Enhanced debug: Print detailed command information
+        print("Registered commands:")
+        for cmd_name, cmd_obj in cli.commands.items():
+            print(f"Command Name: {cmd_name}")
+            print(f"Command Object: {cmd_obj}")
+            print(f"Command Function: {cmd_obj.callback}")
+            print("---")
         
         # Ensure all commands are registered before calling
         cli(prog_name='swarm')
