@@ -152,6 +152,43 @@ def list_agents():
     for agent in agents:
         click.echo(f"- {agent}")
 
+@cli.command()
+@click.option('--data', type=click.Path(exists=True), 
+              default=DATA_CONFIG['historical_data_path'], 
+              help='Path to market data')
+@click.option('--output', type=click.Path(), 
+              default=str(Path(DATA_CONFIG['historical_data_path']).parent / 'optimal_strategy.json'), 
+              help='Path to save trading strategy')
+@click.option('--profit-threshold', type=float, default=0.02, help='Minimum profit percentage')
+@click.option('--stop-loss', type=float, default=0.01, help='Maximum acceptable loss percentage')
+def generate_strategy(data, output, profit_threshold, stop_loss):
+    """Generate an optimal trading strategy from historical data"""
+    from shared.feature_extractor import (
+        identify_optimal_trades, 
+        derive_trading_rules, 
+        save_trading_strategy
+    )
+    from shared.data_handler import DataHandler
+
+    click.echo(f"Loading data from {data}")
+    data_handler = DataHandler({})
+    market_data = data_handler.load_historical_data(data)
+
+    click.echo("Identifying optimal trades...")
+    optimal_trades = identify_optimal_trades(
+        market_data, 
+        profit_threshold=profit_threshold, 
+        stop_loss=stop_loss
+    )
+
+    click.echo("Deriving trading rules...")
+    trading_rules = derive_trading_rules(optimal_trades)
+
+    click.echo(f"Saving strategy to {output}")
+    save_trading_strategy(trading_rules, output)
+
+    click.echo("Strategy generation complete.")
+
 if __name__ == '__main__':
     try:
         cli()
