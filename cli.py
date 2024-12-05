@@ -165,41 +165,58 @@ def list_agents():
 @click.option('--stop-loss', type=float, default=0.01, help='Maximum acceptable loss percentage')
 def generate_strategy(data, output, profit_threshold, stop_loss):
     """Generate an optimal trading strategy from historical data"""
-    from shared.feature_extractor import (
-        identify_optimal_trades, 
-        derive_trading_rules, 
-        save_trading_strategy
-    )
-    from shared.data_handler import DataHandler
+    try:
+        from shared.feature_extractor import (
+            identify_optimal_trades, 
+            derive_trading_rules, 
+            save_trading_strategy
+        )
+        from shared.data_handler import DataHandler
+        import logging
 
-    click.echo(f"Loading data from {data}")
-    data_handler = DataHandler({})
-    market_data = data_handler.load_historical_data(data)
+        logging.info(f"Generating strategy from data: {data}")
+        click.echo(f"Loading data from {data}")
+        
+        data_handler = DataHandler({})
+        market_data = data_handler.load_historical_data(data)
+        
+        if market_data.empty:
+            click.echo("Error: No market data found.")
+            return
 
-    click.echo("Identifying optimal trades...")
-    optimal_trades = identify_optimal_trades(
-        market_data, 
-        profit_threshold=profit_threshold, 
-        stop_loss=stop_loss
-    )
+        click.echo("Identifying optimal trades...")
+        optimal_trades = identify_optimal_trades(
+            market_data, 
+            profit_threshold=profit_threshold, 
+            stop_loss=stop_loss
+        )
 
-    click.echo("Deriving trading rules...")
-    trading_rules = derive_trading_rules(optimal_trades)
+        if optimal_trades.empty:
+            click.echo("Warning: No optimal trades identified.")
+            return
 
-    click.echo(f"Saving strategy to {output}")
-    save_trading_strategy(trading_rules, output)
+        click.echo("Deriving trading rules...")
+        trading_rules = derive_trading_rules(optimal_trades)
 
-    click.echo("Strategy generation complete.")
+        click.echo(f"Saving strategy to {output}")
+        save_trading_strategy(trading_rules, output)
+
+        click.echo("Strategy generation complete.")
+        logging.info(f"Strategy saved to {output}")
+    
+    except Exception as e:
+        click.echo(f"Error generating strategy: {e}")
+        logging.error(f"Strategy generation failed: {e}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == '__main__':
     try:
-        # Print out all registered commands for debugging
-        print("Available commands:", list(cli.commands.keys()))
-        cli()
+        # Ensure all commands are registered before calling
+        cli(prog_name='swarm')
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"CLI Error: {e}")
         import traceback
-        traceback.print_exc()  # Add full traceback for more detailed error info
+        traceback.print_exc()
         sys.exit(1)
 
 class OptimalTradeAgent(BaseAgent):
