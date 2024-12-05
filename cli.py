@@ -10,7 +10,7 @@ from agents.base_agent import BaseAgent
 from agents.scalper_agent import ScalperAgent
 from agents.trend_follower_agent import TrendFollowerAgent
 from agents.correlation_agent import CorrelationAgent
-from optimal_trade_agent import OptimalTradeAgent
+from agents.optimal_trade_agent import OptimalTradeAgent
 from config import (
     SCALPER_AGENT_CONFIG, 
     TREND_FOLLOWER_AGENT_CONFIG, 
@@ -153,7 +153,7 @@ def list_agents():
     for agent in agents:
         click.echo(f"- {agent}")
 
-@cli.command()
+@cli.command(name='generate-strategy')
 @click.option('--data', type=click.Path(exists=True), 
               default=DATA_CONFIG['historical_data_path'], 
               help='Path to market data')
