@@ -18,13 +18,13 @@ from config import (
     DATA_CONFIG
 )
 
-@click.group()
-def swarm():
+@click.group(name='swarm')
+def cli():
     """Market Swarm Trading System CLI"""
     from shared.logging_config import setup_logging
     setup_logging()
 
-@swarm.command()
+@cli.command()
 @click.option('--strategy', default='all', 
               type=click.Choice(['all', 'optimal-trade', 'scalper', 'trend-follower', 'correlation']), 
               help='Trading strategy to run')
@@ -32,7 +32,7 @@ def swarm():
               default=DATA_CONFIG['historical_data_path'], 
               help='Path to market data')
 @click.option('--config', is_flag=True, help='Display current configuration')
-def run(strategy, data, config):
+def run_strategy(strategy, data, config):
     """Run the market swarm trading system"""
     if config:
         # Display configuration details
@@ -154,7 +154,7 @@ def list_agents():
 
 if __name__ == '__main__':
     try:
-        swarm()
+        cli()
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
