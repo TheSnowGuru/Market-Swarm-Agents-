@@ -154,7 +154,7 @@ def list_agents():
     for agent in agents:
         click.echo(f"- {agent}")
 
-@cli.command('generate-strategy')
+@cli.command()
 @click.option('--data', type=click.Path(exists=True), 
               default=DATA_CONFIG['historical_data_path'], 
               help='Path to market data')
