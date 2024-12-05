@@ -163,8 +163,12 @@ def list_agents():
               help='Path to save trading strategy')
 @click.option('--profit-threshold', type=float, default=0.02, help='Minimum profit percentage')
 @click.option('--stop-loss', type=float, default=0.01, help='Maximum acceptable loss percentage')
-def generate_strategy(data, output, profit_threshold, stop_loss):
+def generate_strategy_cmd(data, output, profit_threshold, stop_loss):
     """Generate an optimal trading strategy from historical data"""
+    generate_strategy(data, output, profit_threshold, stop_loss)
+
+def generate_strategy(data, output, profit_threshold, stop_loss):
+    """Core implementation of strategy generation"""
     try:
         from shared.feature_extractor import (
             identify_optimal_trades, 
@@ -241,6 +245,13 @@ if __name__ == '__main__':
             print(f"Command Object: {cmd_obj}")
             print(f"Command Function: {cmd_obj.callback}")
             print("---")
+        
+        # If not running as a script, print commands and exit
+        if len(sys.argv) == 1:
+            print("Available commands:")
+            for cmd_name in cli.commands.keys():
+                print(f"- {cmd_name}")
+            sys.exit(0)
         
         # Ensure all commands are registered before calling
         cli(prog_name='swarm')
