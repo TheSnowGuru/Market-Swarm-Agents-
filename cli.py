@@ -20,7 +20,8 @@ from config import (
 @click.group()
 def swarm():
     """Market Swarm Trading System CLI"""
-    logging.basicConfig(level=logging.INFO)
+    from shared.logging_config import setup_logging
+    setup_logging()
 
 @swarm.command()
 @click.option('--strategy', default='all', 
