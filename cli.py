@@ -235,7 +235,8 @@ def generate_strategy(data, output, profit_threshold, stop_loss):
 if __name__ == '__main__':
     try:
         # Enhanced debug: Print detailed command information
-        print("Registered commands:")
+        print("Debug: Python sys.argv:", sys.argv)
+        print("\nRegistered commands:")
         for cmd_name, cmd_obj in cli.commands.items():
             print(f"Command Name: {cmd_name}")
             print(f"Command Object: {cmd_obj}")
@@ -249,8 +250,13 @@ if __name__ == '__main__':
                 print(f"- {cmd_name}")
             sys.exit(0)
         
+        # Additional debug for command matching
+        print(f"Debug: Attempting to match command: {sys.argv[1]}")
+        print("Debug: Registered command names:", list(cli.commands.keys()))
+        
         # Explicitly handle generate-strategy command
         if len(sys.argv) > 1 and sys.argv[1] == 'generate-strategy':
+            print("Debug: Matched generate-strategy command")
             generate_strategy(
                 data=sys.argv[2] if len(sys.argv) > 2 else DATA_CONFIG['historical_data_path'],
                 output=sys.argv[3] if len(sys.argv) > 3 else str(Path(DATA_CONFIG['historical_data_path']).parent / 'optimal_strategy.json'),
@@ -259,6 +265,7 @@ if __name__ == '__main__':
             )
         else:
             # Ensure all commands are registered before calling
+            print("Debug: Calling CLI with arguments")
             cli(prog_name='swarm')
     except Exception as e:
         print(f"CLI Error: {e}")
