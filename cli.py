@@ -68,7 +68,7 @@ def run_strategy(strategy, data, config):
     # Run the system
     master_agent.run()
 
-@swarm.command()
+@cli.command()
 @click.option('--agent', type=click.Choice(['scalper', 'trend-follower', 'correlation', 'optimal-trade']), 
               help='Specific agent to train')
 @click.option('--data', type=click.Path(exists=True), 
@@ -104,7 +104,7 @@ def train(agent, data, output):
     if output:
         agent_instance.save_model(output)
 
-@swarm.command()
+@cli.command()
 @click.option('--strategy', default='optimal-trade', help='Strategy to backtest')
 @click.option('--data', type=click.Path(exists=True), 
               default=DATA_CONFIG['historical_data_path'], 
@@ -130,7 +130,7 @@ def backtest(strategy, data, report):
         else:
             click.echo(backtest_results)
 
-@swarm.command()
+@cli.command()
 def test():
     """Run project tests"""
     import pytest
@@ -139,7 +139,7 @@ def test():
     result = pytest.main(['-v', 'tests'])
     sys.exit(result)
 
-@swarm.command()
+@cli.command()
 def list_agents():
     """List available trading agents"""
     agents = [
