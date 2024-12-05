@@ -167,6 +167,9 @@ def generate_strategy_cmd(data, output, profit_threshold, stop_loss):
     """Generate an optimal trading strategy from historical data"""
     generate_strategy(data, output, profit_threshold, stop_loss)
 
+# Explicitly register the command
+cli.add_command(generate_strategy_cmd)
+
 def generate_strategy(data, output, profit_threshold, stop_loss):
     """Core implementation of strategy generation"""
     try:
@@ -253,8 +256,18 @@ if __name__ == '__main__':
                 print(f"- {cmd_name}")
             sys.exit(0)
         
-        # Ensure all commands are registered before calling
-        cli(prog_name='swarm')
+        # Explicitly handle generate-strategy command
+        if len(sys.argv) > 1 and sys.argv[1] == 'generate-strategy':
+            from functools import partial
+            generate_strategy_cmd = partial(generate_strategy_cmd, 
+                                            data=sys.argv[2] if len(sys.argv) > 2 else DATA_CONFIG['historical_data_path'],
+                                            output=sys.argv[3] if len(sys.argv) > 3 else str(Path(DATA_CONFIG['historical_data_path']).parent / 'optimal_strategy.json'),
+                                            profit_threshold=float(sys.argv[4]) if len(sys.argv) > 4 else 0.02,
+                                            stop_loss=float(sys.argv[5]) if len(sys.argv) > 5 else 0.01)
+            generate_strategy_cmd()
+        else:
+            # Ensure all commands are registered before calling
+            cli(prog_name='swarm')
     except Exception as e:
         print(f"CLI Error: {e}")
         import traceback
