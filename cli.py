@@ -320,13 +320,12 @@ if __name__ == '__main__':
         
         # Explicitly handle generate-strategy command
         if len(sys.argv) > 1 and sys.argv[1] == 'generate-strategy':
-            from functools import partial
-            generate_strategy_cmd = partial(generate_strategy_cmd, 
-                                            data=sys.argv[2] if len(sys.argv) > 2 else DATA_CONFIG['historical_data_path'],
-                                            output=sys.argv[3] if len(sys.argv) > 3 else str(Path(DATA_CONFIG['historical_data_path']).parent / 'optimal_strategy.json'),
-                                            profit_threshold=float(sys.argv[4]) if len(sys.argv) > 4 else 0.02,
-                                            stop_loss=float(sys.argv[5]) if len(sys.argv) > 5 else 0.01)
-            generate_strategy_cmd()
+            generate_strategy(
+                data=sys.argv[2] if len(sys.argv) > 2 else DATA_CONFIG['historical_data_path'],
+                output=sys.argv[3] if len(sys.argv) > 3 else str(Path(DATA_CONFIG['historical_data_path']).parent / 'optimal_strategy.json'),
+                profit_threshold=float(sys.argv[4]) if len(sys.argv) > 4 else 0.02,
+                stop_loss=float(sys.argv[5]) if len(sys.argv) > 5 else 0.01
+            )
         else:
             # Ensure all commands are registered before calling
             cli(prog_name='swarm')
