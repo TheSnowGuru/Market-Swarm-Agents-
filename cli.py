@@ -154,7 +154,7 @@ def list_agents():
     for agent in agents:
         click.echo(f"- {agent}")
 
-@cli.command()  # Remove name parameter to use function name
+@cli.command('generate-strategy')
 @click.option('--data', type=click.Path(exists=True), 
               default=DATA_CONFIG['historical_data_path'], 
               help='Path to market data')
@@ -164,7 +164,6 @@ def list_agents():
 @click.option('--profit-threshold', type=float, default=0.02, help='Minimum profit percentage')
 @click.option('--stop-loss', type=float, default=0.01, help='Maximum acceptable loss percentage')
 def generate_strategy(data, output, profit_threshold, stop_loss):
-    """Generate an optimal trading strategy from historical data"""
     """Generate an optimal trading strategy from historical data"""
     from shared.feature_extractor import (
         identify_optimal_trades, 
