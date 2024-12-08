@@ -4,6 +4,9 @@ scikit-learn==1.3.2
 matplotlib==3.8.2
 seaborn==0.13.0
 click==8.1.7
+rich==13.7.0
+prompt-toolkit==3.0.43
+questionary==2.0.1
 quantstats==0.0.59
 vectorbt==0.26.2
 yfinance==0.2.31
