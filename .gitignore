@@ -1,6 +1,6 @@
 .aider*
 .env
-*.csv
 *.pyc
 *.pyc
 /venv
+*.zip
