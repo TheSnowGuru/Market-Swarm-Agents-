@@ -11,4 +11,3 @@ ccxt==3.1.16
 numba==0.59.0
 pytest==7.4.3
 pytest-cov==4.1.0
-# Remove json package as it's part of Python standard library
