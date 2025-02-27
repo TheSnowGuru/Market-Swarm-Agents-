@@ -475,6 +475,10 @@ class SwarmCLI:
             self.main_menu()
 
     def create_agent_workflow(self):
+        # Reset any previous feature selections
+        if hasattr(self, '_selected_features'):
+            delattr(self, '_selected_features')
+        
         # Initialize Configuration Manager
         config_manager = AgentConfigManager()
         
@@ -488,17 +492,40 @@ class SwarmCLI:
             "Enter a unique name for this agent:"
         ).ask()
 
-        # 2. Feature Selection
-        features = questionary.checkbox(
-            "Select features for the agent:",
+        # 4. Strategy Selection/Creation
+        strategy_choice = questionary.select(
+            "Strategy Options:",
             choices=[
-                'moving_average', 
-                'rsi', 
-                'macd', 
-                'bollinger_bands', 
-                'volume_trend'
+                "Create New Strategy", 
+                "Use Default Strategy"
             ]
         ).ask()
+
+        if strategy_choice == "Create New Strategy":
+            # This will trigger feature selection during strategy creation
+            selected_strategy = self.create_new_strategy_workflow(agent_name)
+            
+            # If strategy creation was cancelled, restart workflow
+            if selected_strategy is None:
+                return self.create_agent_workflow()
+            
+            # Use features from strategy creation
+            features = getattr(self, '_selected_features', [])
+        else:
+            # Use a default strategy based on agent type
+            selected_strategy = f"{agent_type}_default_strategy"
+            
+            # Default feature selection
+            features = questionary.checkbox(
+                "Select features for the agent:",
+                choices=[
+                    'moving_average', 
+                    'rsi', 
+                    'macd', 
+                    'bollinger_bands', 
+                    'volume_trend'
+                ]
+            ).ask()
         
         # 3. Feature Parameters
         feature_params = {}
@@ -510,23 +537,8 @@ class SwarmCLI:
                 }
             # Add more feature-specific parameter inputs
         
-        # 4. Strategy Selection/Creation
-        strategy_choice = questionary.select(
-            "Strategy Options:",
-            choices=[
-                "Create New Strategy", 
-                "Use Default Strategy"
-            ]
-        ).ask()
-
-        if strategy_choice == "Create New Strategy":
-            selected_strategy = self.create_new_strategy_workflow(agent_name)
-        else:
-            # Use a default strategy based on agent type
-            selected_strategy = f"{agent_type}_default_strategy"
-        
         # 5. Automatic Training
-        self.console.print(f"[green]Automatically training {agent_name}...[/green]")
+        self.console.print(f"[yellow]Automatically training {agent_name}...[/yellow]")
         
         # Generate Agent Configuration
         agent_config = config_manager.generate_agent_config(
