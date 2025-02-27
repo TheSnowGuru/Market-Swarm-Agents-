@@ -1,6 +1,8 @@
 import sys
 import os
 import logging
+import pandas as pd
+import numpy as np
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -226,10 +228,142 @@ class SwarmCLI:
         else:
             return 'cancel'
 
-    def _save_strategy(self):
-        # Placeholder for actual strategy saving logic
+    def _save_strategy(self, strategy_name=None, market_data=None, profit_threshold=None, 
+                       stop_loss=None, features=None, backtest_results=None):
+        """
+        Save strategy configuration with optional detailed parameters
+        
+        Args:
+            strategy_name (str, optional): Name of the strategy
+            market_data (str, optional): Path to market data
+            profit_threshold (float, optional): Profit threshold
+            stop_loss (float, optional): Stop loss threshold
+            features (list, optional): Selected features
+            backtest_results (list, optional): Backtest trade results
+        """
+        strategy_config = {
+            'name': strategy_name or 'default_strategy',
+            'market_data': market_data,
+            'profit_threshold': profit_threshold,
+            'stop_loss': stop_loss,
+            'features': features,
+            'backtest_results': backtest_results
+        }
+        
+        # TODO: Implement actual strategy saving logic
+        # For now, just print and reset context
         self.console.print("[green]Strategy saved successfully![/green]")
+        self.console.print(f"Strategy Details: {strategy_config}")
         self._reset_context()
+
+    def _select_and_label_features(self, market_data):
+        """
+        Interactive feature selection and trade labeling workflow
+        
+        Args:
+            market_data (str): Path to market data CSV
+        
+        Returns:
+            dict: Comprehensive feature and trade labeling configuration
+        """
+        # 1. Feature Selection
+        available_features = [
+            'moving_average', 
+            'rsi', 
+            'macd', 
+            'bollinger_bands', 
+            'volume_trend',
+            'price_momentum',
+            'volatility_index'
+        ]
+        
+        selected_features = questionary.checkbox(
+            "Select features for strategy analysis:",
+            choices=available_features
+        ).ask()
+        
+        # 2. Load Market Data
+        try:
+            df = pd.read_csv(market_data)
+        except Exception as e:
+            self.console.print(f"[red]Error loading market data: {e}[/red]")
+            return None
+        
+        # 3. Interactive Trade Labeling
+        labeled_trades = self._label_trades_interactively(df, selected_features)
+        
+        # 4. Derive Strategy Parameters
+        strategy_params = self._derive_strategy_parameters(labeled_trades)
+        
+        return {
+            'features': selected_features,
+            'labeled_trades': labeled_trades,
+            'strategy_params': strategy_params
+        }
+
+    def _label_trades_interactively(self, df, features):
+        """
+        Interactive trade labeling interface
+        
+        Args:
+            df (pd.DataFrame): Market price data
+            features (list): Selected features
+        
+        Returns:
+            list: Labeled trades with contextual information
+        """
+        labeled_trades = []
+        
+        # Display sample trades for labeling
+        for index, row in df.iterrows():
+            trade_details = {
+                'date': row['date'],
+                'price': row['close'],
+                **{feature: row.get(feature, 'N/A') for feature in features}
+            }
+            
+            is_good_trade = questionary.confirm(
+                f"Is this a good trade? Details:\n{trade_details}"
+            ).ask()
+            
+            labeled_trades.append({
+                'trade_details': trade_details,
+                'is_good_trade': is_good_trade
+            })
+        
+        return labeled_trades
+
+    def _derive_strategy_parameters(self, labeled_trades):
+        """
+        Derive strategy parameters from labeled trades
+        
+        Args:
+            labeled_trades (list): Trades with labels
+        
+        Returns:
+            dict: Derived strategy parameters
+        """
+        good_trades = [trade for trade in labeled_trades if trade['is_good_trade']]
+        
+        # Calculate key metrics
+        metrics = {
+            'win_rate': len(good_trades) / len(labeled_trades),
+            'avg_profit': np.mean([trade['trade_details']['price'] for trade in good_trades]),
+            'volatility': np.std([trade['trade_details']['price'] for trade in good_trades])
+        }
+        
+        # Recommend strategy parameters
+        strategy_params = {
+            'profit_threshold': metrics['win_rate'],
+            'stop_loss': metrics['volatility'] * 0.5,
+            'recommended_features': list(set(
+                feature for trade in good_trades 
+                for feature in trade['trade_details'].keys() 
+                if feature not in ['date', 'price']
+            ))
+        }
+        
+        return strategy_params
 
     def backtesting_menu(self):
         choices = [
@@ -404,41 +538,34 @@ class SwarmCLI:
 
     def create_new_strategy_workflow(self, agent_name):
         # 1. Select Market Data
-        market_data = self._select_market_data()
-    
-        # 2. Configure Strategy Parameters
-        profit_threshold = questionary.text(
-            "Enter Profit Threshold (0.01-1.0):",
-            validate=lambda x: self._validate_float(x, 0, 1)
-        ).ask()
-    
-        stop_loss = questionary.text(
-            "Enter Stop Loss Threshold (0.01-1.0):",
-            validate=lambda x: self._validate_float(x, 0, 1)
-        ).ask()
-    
-        # 3. Feature Selection/Engineering
-        features = self._select_features()
-    
-        # 4. Backtest Strategy
-        backtest_results = self._backtest_strategy(
-            market_data, 
-            profit_threshold, 
-            stop_loss, 
-            features
-        )
-    
-        # 5. Save Strategy for Agent
+        market_data_path = self._select_market_data()
+        
+        if market_data_path == 'back' or market_data_path == 'cancel':
+            return None
+        
+        # 2. Interactive Feature Selection and Trade Labeling
+        strategy_config = self._select_and_label_features(market_data_path)
+        
+        if strategy_config is None:
+            return None
+        
+        # 3. Extract Strategy Parameters
+        features = strategy_config['features']
+        strategy_params = strategy_config['strategy_params']
+        
+        # 4. Generate Strategy Name
         strategy_name = f"{agent_name}_strategy"
+        
+        # 5. Save Strategy Configuration
         self._save_strategy(
             strategy_name, 
-            market_data, 
-            profit_threshold, 
-            stop_loss, 
+            market_data_path, 
+            strategy_params['profit_threshold'], 
+            strategy_params['stop_loss'], 
             features, 
-            backtest_results
+            strategy_config['labeled_trades']
         )
-    
+        
         return strategy_name
 
     def edit_agent_workflow(self):
