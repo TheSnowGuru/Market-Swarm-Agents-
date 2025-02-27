@@ -92,11 +92,27 @@ class SwarmCLI:
 
         menu_actions[choice]()
 
-    def _validate_float(self, value, min_val=0, max_val=1):
+    def _validate_float(self, value, min_val=0, max_val=1, param_type=None):
         try:
             float_val = float(value)
+            
+            # Specific validation for profit factor and stop loss
+            if param_type == 'profit_threshold':
+                # Profit factor: 0 to 1 (0% to 100%)
+                if not (0 <= float_val <= 1):
+                    print("Profit threshold must be between 0 and 1 (0% to 100%)")
+                    return False
+            
+            elif param_type == 'stop_loss':
+                # Stop loss: 0 to 0.05 (0% to 5%)
+                if not (0 <= float_val <= 0.05):
+                    print("Stop loss must be between 0 and 0.05 (0% to 5%)")
+                    return False
+            
             return min_val <= float_val <= max_val
+        
         except ValueError:
+            print("Invalid input. Please enter a numeric value.")
             return False
 
     def _reset_context(self, keep_keys=None):
@@ -162,7 +178,7 @@ class SwarmCLI:
         # Contextual input with navigation
         profit_threshold = questionary.text(
             f"Configure profit threshold for {self.current_context['data_file']} (0.01-1.0):",
-            validate=lambda x: self._validate_float(x, 0, 1),
+            validate=lambda x: self._validate_float(x, 0, 1, param_type='profit_threshold'),
             default=str(self.current_context.get('profit_threshold', '0.02'))
         ).ask()
 
@@ -174,8 +190,8 @@ class SwarmCLI:
 
     def _configure_stop_loss(self):
         stop_loss = questionary.text(
-            f"Configure stop loss for {self.current_context['data_file']} (0.01-1.0):",
-            validate=lambda x: self._validate_float(x, 0, 1),
+            f"Configure stop loss for {self.current_context['data_file']} (0.01-0.05):",
+            validate=lambda x: self._validate_float(x, 0, 0.05, param_type='stop_loss'),
             default=str(self.current_context.get('stop_loss', '0.01'))
         ).ask()
 
