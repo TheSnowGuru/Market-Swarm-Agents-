@@ -299,30 +299,134 @@ class SwarmCLI:
         elif choice == "Back to Main Menu":
             self.main_menu()
 
-    def create_agent_interactive(self):
+    def manage_agents_menu(self):
+        choices = [
+            "Create Agent",
+            "Edit Agent",
+            "Back to Main Menu"
+        ]
+    
+        choice = questionary.select(
+            "Manage Agents:", 
+            choices=choices
+        ).ask()
+
+        if choice == "Create Agent":
+            self.create_agent_workflow()
+        elif choice == "Edit Agent":
+            self.edit_agent_workflow()
+        elif choice == "Back to Main Menu":
+            self.main_menu()
+
+    def create_agent_workflow(self):
+        # 1. Enter Agent Details
         agent_type = questionary.select(
-            "Select agent type to create:", 
+            "Select agent type:", 
             choices=['scalper', 'trend-follower', 'correlation', 'optimal-trade']
         ).ask()
-        
+    
         agent_name = questionary.text(
-            "Enter a name for this agent:"
+            "Enter a unique name for this agent:"
         ).ask()
-        
-        config_path = questionary.text(
-            "Enter configuration file path (optional):"
+    
+        # 2. Strategy Options
+        strategy_choice = questionary.select(
+            "Strategy Options:",
+            choices=[
+                "Attach Existing Strategy", 
+                "Create New Strategy"
+            ]
         ).ask()
-        
-        # Temporarily print what would happen instead of calling the function
-        self.console.print(f"[bold]Would create agent with:[/bold]")
-        self.console.print(f"- Type: {agent_type}")
-        self.console.print(f"- Name: {agent_name}")
-        self.console.print(f"- Config: {config_path}")
-        
-        self.console.print("[green]Agent created successfully![/green]")
-        
-        # Return to main menu after creating agent
-        self.main_menu()
+    
+        if strategy_choice == "Attach Existing Strategy":
+            # TODO: Implement strategy selection logic
+            existing_strategies = self._list_existing_strategies()
+            selected_strategy = questionary.select(
+                "Select a strategy:",
+                choices=existing_strategies
+            ).ask()
+        else:
+            # Invoke New Strategy Flow
+            selected_strategy = self.create_new_strategy_workflow(agent_name)
+    
+        # 3. Train Agent
+        self.train_agent(agent_name, agent_type, selected_strategy)
+    
+        # 4. Validate & Save
+        self.validate_and_save_agent(agent_name, agent_type, selected_strategy)
+    
+        self.console.print(f"[green]Agent '{agent_name}' created successfully![/green]")
+        self.manage_agents_menu()
+
+    def create_new_strategy_workflow(self, agent_name):
+        # 1. Select Market Data
+        market_data = self._select_market_data()
+    
+        # 2. Configure Strategy Parameters
+        profit_threshold = questionary.text(
+            "Enter Profit Threshold (0.01-1.0):",
+            validate=lambda x: self._validate_float(x, 0, 1)
+        ).ask()
+    
+        stop_loss = questionary.text(
+            "Enter Stop Loss Threshold (0.01-1.0):",
+            validate=lambda x: self._validate_float(x, 0, 1)
+        ).ask()
+    
+        # 3. Feature Selection/Engineering
+        features = self._select_features()
+    
+        # 4. Backtest Strategy
+        backtest_results = self._backtest_strategy(
+            market_data, 
+            profit_threshold, 
+            stop_loss, 
+            features
+        )
+    
+        # 5. Save Strategy for Agent
+        strategy_name = f"{agent_name}_strategy"
+        self._save_strategy(
+            strategy_name, 
+            market_data, 
+            profit_threshold, 
+            stop_loss, 
+            features, 
+            backtest_results
+        )
+    
+        return strategy_name
+
+    def edit_agent_workflow(self):
+        # 1. Select an Agent
+        agents = self._list_existing_agents()
+        selected_agent = questionary.select(
+            "Select an agent to edit:",
+            choices=agents
+        ).ask()
+    
+        # 2. Strategy Options
+        strategy_action = questionary.select(
+            "Strategy Options:",
+            choices=[
+                "Replace/Update Strategy", 
+                "Retrain Existing Strategy"
+            ]
+        ).ask()
+    
+        if strategy_action == "Replace/Update Strategy":
+            new_strategy = self.create_new_strategy_workflow(selected_agent)
+            self._update_agent_strategy(selected_agent, new_strategy)
+        else:
+            self._retrain_agent_strategy(selected_agent)
+    
+        # 3. Adjust Agent Settings
+        self._adjust_agent_settings(selected_agent)
+    
+        # 4. Validate & Save
+        self.validate_and_save_agent(selected_agent)
+    
+        self.manage_agents_menu()
         
     def train_agent_interactive(self):
         agent = questionary.select(
