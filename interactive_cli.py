@@ -323,6 +323,9 @@ class SwarmCLI:
             self.main_menu()
 
     def create_agent_workflow(self):
+        # Initialize Configuration Manager
+        config_manager = AgentConfigManager()
+        
         # 1. Enter Agent Details
         agent_type = questionary.select(
             "Select agent type:", 
@@ -333,7 +336,29 @@ class SwarmCLI:
             "Enter a unique name for this agent:"
         ).ask()
     
-        # 2. Strategy Options
+        # 2. Feature Selection
+        features = questionary.checkbox(
+            "Select features for the agent:",
+            choices=[
+                'moving_average', 
+                'rsi', 
+                'macd', 
+                'bollinger_bands', 
+                'volume_trend'
+            ]
+        ).ask()
+        
+        # 3. Feature Parameters
+        feature_params = {}
+        for feature in features:
+            if feature == 'moving_average':
+                feature_params[feature] = {
+                    'window': questionary.text(f"MA Window for {feature}:", 
+                                               validate=lambda x: x.isdigit()).ask()
+                }
+            # Add more feature-specific parameter inputs
+        
+        # 4. Strategy Options
         strategy_choice = questionary.select(
             "Strategy Options:",
             choices=[
@@ -343,8 +368,7 @@ class SwarmCLI:
         ).ask()
     
         if strategy_choice == "Attach Existing Strategy":
-            # TODO: Implement strategy selection logic
-            existing_strategies = self._list_existing_strategies()
+            existing_strategies = config_manager.list_agents()  # Placeholder
             selected_strategy = questionary.select(
                 "Select a strategy:",
                 choices=existing_strategies
@@ -353,13 +377,28 @@ class SwarmCLI:
             # Invoke New Strategy Flow
             selected_strategy = self.create_new_strategy_workflow(agent_name)
     
-        # 3. Train Agent
-        self.train_agent(agent_name, agent_type, selected_strategy)
-    
-        # 4. Validate & Save
-        self.validate_and_save_agent(agent_name, agent_type, selected_strategy)
-    
+        # 5. Generate Agent Configuration
+        agent_config = config_manager.generate_agent_config(
+            agent_name=agent_name,
+            agent_type=agent_type,
+            strategy=selected_strategy,
+            features=features,
+            feature_params=feature_params
+        )
+        
+        # 6. Save Configuration
+        config_path = config_manager.save_agent_config(agent_config)
+        
+        # 7. Train Agent (placeholder)
+        trained_model = self.train_agent(agent_name, agent_type, selected_strategy)
+        
+        # 8. Save Model
+        model_path = config_manager.save_model(agent_name, trained_model)
+        
         self.console.print(f"[green]Agent '{agent_name}' created successfully![/green]")
+        self.console.print(f"Configuration saved to: {config_path}")
+        self.console.print(f"Model saved to: {model_path}")
+        
         self.manage_agents_menu()
 
     def create_new_strategy_workflow(self, agent_name):
