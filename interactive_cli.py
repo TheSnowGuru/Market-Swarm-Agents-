@@ -580,6 +580,31 @@ class SwarmCLI:
         
         return strategy_name
 
+    def _list_existing_agents(self):
+        """
+        List existing agents by scanning configuration files
+        
+        Returns:
+            list: Names of existing agents
+        """
+        config_manager = AgentConfigManager()
+        try:
+            # Scan the configs directory for agent configuration files
+            config_files = [f for f in os.listdir(config_manager.base_path) if f.endswith('.json')]
+            agents = [os.path.splitext(file)[0] for file in config_files]
+            
+            # If no agents found, provide a helpful message
+            if not agents:
+                self.console.print("[yellow]No existing agents found. Create a new agent first.[/yellow]")
+                return ['Create New Agent', 'Back to Main Menu']
+            
+            agents.extend(['Create New Agent', 'Back to Main Menu'])
+            return agents
+        
+        except Exception as e:
+            self.console.print(f"[red]Error listing agents: {e}[/red]")
+            return ['Create New Agent', 'Back to Main Menu']
+
     def edit_agent_workflow(self):
         # 1. Select an Agent
         agents = self._list_existing_agents()
@@ -587,6 +612,12 @@ class SwarmCLI:
             "Select an agent to edit:",
             choices=agents
         ).ask()
+        
+        # Handle special menu options
+        if selected_agent == 'Create New Agent':
+            return self.create_agent_workflow()
+        elif selected_agent == 'Back to Main Menu':
+            return self.manage_agents_menu()
     
         # 2. Strategy Options
         strategy_action = questionary.select(
