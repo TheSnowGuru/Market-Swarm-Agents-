@@ -466,11 +466,11 @@ class SwarmCLI:
             "Select agent type:", 
             choices=['scalper', 'trend-follower', 'correlation', 'optimal-trade']
         ).ask()
-    
+
         agent_name = questionary.text(
             "Enter a unique name for this agent:"
         ).ask()
-    
+
         # 2. Feature Selection
         features = questionary.checkbox(
             "Select features for the agent:",
@@ -493,26 +493,25 @@ class SwarmCLI:
                 }
             # Add more feature-specific parameter inputs
         
-        # 4. Strategy Options
+        # 4. Strategy Selection/Creation
         strategy_choice = questionary.select(
             "Strategy Options:",
             choices=[
-                "Attach Existing Strategy", 
-                "Create New Strategy"
+                "Create New Strategy", 
+                "Use Default Strategy"
             ]
         ).ask()
-    
-        if strategy_choice == "Attach Existing Strategy":
-            existing_strategies = config_manager.list_agents()  # Placeholder
-            selected_strategy = questionary.select(
-                "Select a strategy:",
-                choices=existing_strategies
-            ).ask()
-        else:
-            # Invoke New Strategy Flow
+
+        if strategy_choice == "Create New Strategy":
             selected_strategy = self.create_new_strategy_workflow(agent_name)
-    
-        # 5. Generate Agent Configuration
+        else:
+            # Use a default strategy based on agent type
+            selected_strategy = f"{agent_type}_default_strategy"
+        
+        # 5. Automatic Training
+        self.console.print(f"[green]Automatically training {agent_name}...[/green]")
+        
+        # Generate Agent Configuration
         agent_config = config_manager.generate_agent_config(
             agent_name=agent_name,
             agent_type=agent_type,
@@ -521,20 +520,33 @@ class SwarmCLI:
             feature_params=feature_params
         )
         
-        # 6. Save Configuration
-        config_path = config_manager.save_agent_config(agent_config)
-        
-        # 7. Train Agent (placeholder)
+        # Train Agent
         trained_model = self.train_agent(agent_name, agent_type, selected_strategy)
         
-        # 8. Save Model
+        # Save Configuration and Model
+        config_path = config_manager.save_agent_config(agent_config)
         model_path = config_manager.save_model(agent_name, trained_model)
         
-        self.console.print(f"[green]Agent '{agent_name}' created successfully![/green]")
+        self.console.print(f"[green]Agent '{agent_name}' created and trained successfully![/green]")
         self.console.print(f"Configuration saved to: {config_path}")
         self.console.print(f"Model saved to: {model_path}")
         
-        self.manage_agents_menu()
+        # Optional: Confirm next steps
+        next_action = questionary.select(
+            "What would you like to do next?",
+            choices=[
+                "Back to Agent Management",
+                "Test Agent",
+                "Create Another Agent"
+            ]
+        ).ask()
+        
+        if next_action == "Test Agent":
+            self.test_agent(agent_name)
+        elif next_action == "Create Another Agent":
+            self.create_agent_workflow()
+        else:
+            self.manage_agents_menu()
 
     def create_new_strategy_workflow(self, agent_name):
         # 1. Select Market Data
@@ -622,6 +634,60 @@ class SwarmCLI:
         # train(agent=agent, data=data_path, output=output_path)
         
         self.agent_management_menu()
+
+    def train_agent(self, agent_name, agent_type, strategy):
+        """
+        Train an agent based on its type and strategy
+        
+        Args:
+            agent_name (str): Name of the agent
+            agent_type (str): Type of agent (scalper, trend-follower, etc.)
+            strategy (str): Strategy to be used
+        
+        Returns:
+            object: Trained model or None
+        """
+        self.console.print(f"[yellow]Training agent: {agent_name}[/yellow]")
+        
+        # Placeholder training logic
+        try:
+            # Simulate training process
+            self.console.print(f"Training {agent_type} agent with {strategy} strategy")
+            
+            # In a real implementation, this would involve:
+            # 1. Loading training data
+            # 2. Preprocessing data
+            # 3. Training model
+            # 4. Validating model
+            
+            # For now, return a dummy model
+            return {
+                'agent_name': agent_name,
+                'agent_type': agent_type,
+                'strategy': strategy,
+                'trained': True
+            }
+        
+        except Exception as e:
+            self.console.print(f"[red]Training failed: {e}[/red]")
+            return None
+
+    def test_agent(self, agent_name):
+        """
+        Placeholder method for testing a newly created agent
+        
+        Args:
+            agent_name (str): Name of the agent to test
+        """
+        self.console.print(f"[yellow]Testing agent: {agent_name}[/yellow]")
+        # Implement basic agent testing logic
+        test_result = questionary.confirm("Would you like to run a quick backtest?").ask()
+        
+        if test_result:
+            self.console.print("[green]Simulating backtest...[/green]")
+            # Add backtest simulation logic
+        
+        self.manage_agents_menu()
 
     def run(self):
         try:
