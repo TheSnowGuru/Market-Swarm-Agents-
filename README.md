@@ -73,81 +73,66 @@ The **Master Agent** oversees all these agents, ranks their performance, allocat
    pip install -r requirements.txt
    ```
 
-### 🖥️ CLI Command Reference
+### 🖥️ Interactive CLI & Workflow
 
-Market Swarm Agents provides a comprehensive CLI with multiple commands to interact with the platform:
+Market Swarm Agents now features an interactive CLI with a comprehensive, step-guided workflow for agent and strategy management:
 
-#### 1. Testing Commands
-- **Run Unit Tests**:
+#### 1. Agent Management Workflow
+- **Interactive Agent Creation**:
+  - Select agent type (scalper, trend-follower, correlation)
+  - Define unique agent name
+  - Select and configure features
+  - Create or select a strategy
+  - Automatic agent training
+  - Optional agent testing
+
+- **Key Workflow Steps**:
+  1. Feature Selection
+     - Multi-feature checkbox selection
+     - Configurable feature parameters
+  2. Strategy Development
+     - Create new strategy or use default
+     - Interactive trade labeling
+     - Automatic strategy parameter derivation
+  3. Automatic Training
+     - One-click agent training
+     - Model and configuration saving
+  4. Agent Testing
+     - Quick backtest simulation
+     - Performance preview
+
+#### 2. Strategy Management
+- **Dynamic Strategy Creation**:
+  - Select market data
+  - Configure profit threshold
+  - Set stop-loss parameters
+  - Review and save strategy
+  - Iterative strategy refinement
+
+#### 3. CLI Commands
+- **Interactive Mode**:
   ```bash
-  python cli.py test
+  python interactive_cli.py
   ```
-  Runs all unit tests and generates a coverage report.
+  Launch full interactive trading system management
 
-- **Run Integration Tests**:
+- **Specific CLI Commands**:
   ```bash
-  python cli.py test --integration
+  python cli.py generate-strategy  # Generate trading strategy
+  python cli.py train              # Train specific agents
+  python cli.py backtest           # Perform strategy backtesting
   ```
-  Executes integration tests to validate system-wide functionality.
 
-#### 2. Agent Management
-- **Run Agents**:
-  ```bash
-  python cli.py run
-  ```
-  Starts all agents under Master Agent supervision with default configuration.
+#### 4. Configuration Management
+- Automatic JSON-based configuration
+- Versioned agent and strategy configs
+- Centralized configuration management
 
-- **Run Specific Agent**:
-  ```bash
-  python cli.py run --agent scalper
-  ```
-  Launches a specific agent type (scalper, trend-follower, correlation).
-
-#### 3. Training & Backtesting
-- **Train Agent**:
-  ```bash
-  python cli.py train --agent scalper --data path/to/data.csv
-  ```
-  Train a specific agent using provided historical market data.
-
-- **Backtest Strategy**:
-  ```bash
-  python cli.py backtest --strategy trend_follower --start-date 2023-01-01 --end-date 2023-12-31
-  ```
-  Perform comprehensive backtesting for a specific strategy within a date range.
-
-#### 4. Data Management
-- **Preprocess Data**:
-  ```bash
-  python cli.py preprocess --input raw_data.csv --output processed_data.csv
-  ```
-  Preprocess and clean market data for agent training.
-
-- **Generate Features**:
-  ```bash
-  python cli.py features --data processed_data.csv --indicators rsi,macd
-  ```
-  Extract and generate technical indicators from market data.
-
-#### 5. Performance Analysis
-- **Generate Performance Report**:
-  ```bash
-  python cli.py report --agent scalper --metrics sharpe,drawdown
-  ```
-  Create a detailed performance report for a specific agent.
-
-#### 6. Configuration
-- **List Available Configurations**:
-  ```bash
-  python cli.py config list
-  ```
-  Display available agent and strategy configurations.
-
-- **Create New Configuration**:
-  ```bash
-  python cli.py config create --agent trend_follower
-  ```
-  Interactively create a new agent configuration.
+### 🚀 Workflow Highlights
+- **Guided Experience**: Step-by-step agent and strategy creation
+- **Intelligent Defaults**: Smart parameter suggestions
+- **Flexible Configuration**: Easily customize trading approaches
+- **Rapid Prototyping**: Quick strategy development and testing
 
 ### Advanced Usage Tips
 - Use `--help` with any command to get detailed information
