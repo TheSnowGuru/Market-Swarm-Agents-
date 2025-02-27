@@ -42,13 +42,7 @@ class SwarmCLI:
         self.display_banner()
         
         choices = [
-            "Strategy Management",
-            "Create New Agent",
-            "Backtesting",
-            "Agent Management", 
-            "Data Management",
-            "Deployment",
-            "System Settings",
+            "Manage Agents",
             "Exit"
         ]
         
@@ -57,14 +51,8 @@ class SwarmCLI:
             choices=choices
         ).ask()
 
-        if choice == "Strategy Management":
-            self.strategy_management_menu()
-        elif choice == "Create New Agent":
-            self.create_agent_interactive()
-        elif choice == "Backtesting":
-            self.backtesting_menu()
-        elif choice == "Agent Management":
-            self.agent_management_menu()
+        if choice == "Manage Agents":
+            self.manage_agents_menu()
         elif choice == "Exit":
             sys.exit(0)
 
