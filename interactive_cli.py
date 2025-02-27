@@ -22,6 +22,14 @@ class SwarmCLI:
     def __init__(self):
         self.console = Console()
         self.logger = logging.getLogger(__name__)
+        self.current_context = {
+            'strategy': None,
+            'data_file': None,
+            'profit_threshold': None,
+            'stop_loss': None,
+            'agent_type': None,
+            'agent_name': None
+        }
 
     def display_banner(self):
         banner = """
@@ -61,23 +69,40 @@ class SwarmCLI:
             sys.exit(0)
 
     def strategy_management_menu(self):
-        choices = [
-            "Create New Strategy",
-            "List Existing Strategies",
-            "Edit Strategy",
-            "Delete Strategy",
-            "Back to Main Menu"
-        ]
+        # Dynamic menu based on current strategy development stage
+        stages = []
         
+        if not self.current_context['data_file']:
+            stages.append("Start New Strategy")
+        
+        if self.current_context['data_file'] and not self.current_context['profit_threshold']:
+            stages.append("Configure Profit Threshold")
+        
+        if self.current_context['profit_threshold'] and not self.current_context['stop_loss']:
+            stages.append("Configure Stop Loss")
+        
+        stages.extend([
+            "Review Current Strategy",
+            "Save Strategy",
+            "Back to Main Menu"
+        ])
+
         choice = questionary.select(
             "Strategy Management:", 
-            choices=choices
+            choices=stages
         ).ask()
 
-        if choice == "Create New Strategy":
-            self.generate_strategy_interactive()
-        elif choice == "Back to Main Menu":
-            self.main_menu()
+        # Map choices to appropriate methods
+        menu_actions = {
+            "Start New Strategy": self.generate_strategy_interactive,
+            "Configure Profit Threshold": self._configure_profit_threshold,
+            "Configure Stop Loss": self._configure_stop_loss,
+            "Review Current Strategy": self._review_strategy_config,
+            "Save Strategy": self._save_strategy,
+            "Back to Main Menu": self.main_menu
+        }
+
+        menu_actions[choice]()
 
     def _validate_float(self, value, min_val=0, max_val=1):
         try:
@@ -86,68 +111,120 @@ class SwarmCLI:
         except ValueError:
             return False
 
-    def generate_strategy_interactive(self):
-        # Recursively find all CSV files in the data directory
-        def find_csv_files(directory):
-            csv_files = []
-            for root, dirs, files in os.walk(directory):
-                for file in files:
-                    if file.endswith('.csv'):
-                        # Create a relative path from the base data directory
-                        relative_path = os.path.relpath(os.path.join(root, file), directory)
-                        csv_files.append(relative_path)
-            return csv_files
+    def _reset_context(self, keep_keys=None):
+        """Reset context while optionally preserving specific keys"""
+        default_context = {
+            'strategy': None,
+            'data_file': None,
+            'profit_threshold': None,
+            'stop_loss': None,
+            'agent_type': None,
+            'agent_name': None
+        }
+        if keep_keys:
+            for key in keep_keys:
+                default_context[key] = self.current_context.get(key)
+        self.current_context = default_context
 
-        # Specify the base data directory
-        data_dir = 'data/price_data'
+    def generate_strategy_interactive(self):
+        # Dynamic menu flow with clear steps
+        steps = [
+            self._select_market_data,
+            self._configure_profit_threshold,
+            self._configure_stop_loss,
+            self._review_strategy_config,
+            self._save_or_continue
+        ]
+
+        for step in steps:
+            result = step()
+            if result == 'back':
+                return self.strategy_management_menu()
+            if result == 'cancel':
+                self._reset_context()
+                return self.main_menu()
+
+    def _find_csv_files(self, directory='data/price_data'):
+        csv_files = []
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                if file.endswith('.csv'):
+                    relative_path = os.path.relpath(os.path.join(root, file), directory)
+                    csv_files.append(relative_path)
+        return csv_files
+
+    def _select_market_data(self):
+        # Enhanced file selection with back/cancel options
+        choices = self._find_csv_files() + ['Back', 'Cancel']
         
-        # Get list of CSV files
-        csv_files = find_csv_files(data_dir)
-        
-        if not csv_files:
-            self.console.print("[red]No CSV files found in the data directory![/red]")
-            return self.strategy_management_menu()
-        
-        # Select file from dropdown
         selected_file = questionary.select(
             "Select market data file:",
-            choices=csv_files
+            choices=choices
         ).ask()
-        
-        # Construct full file path
-        full_file_path = os.path.join(data_dir, selected_file)
-        
-        # Use text input with validation for profit threshold
+
+        if selected_file == 'Back':
+            return 'back'
+        if selected_file == 'Cancel':
+            return 'cancel'
+
+        self.current_context['data_file'] = selected_file
+        return 'continue'
+
+    def _configure_profit_threshold(self):
+        # Contextual input with navigation
         profit_threshold = questionary.text(
-            "Enter profit threshold (0.01-1.0):",
-            validate=lambda x: self._validate_float(x, 0, 1)
+            f"Configure profit threshold for {self.current_context['data_file']} (0.01-1.0):",
+            validate=lambda x: self._validate_float(x, 0, 1),
+            default=str(self.current_context.get('profit_threshold', '0.02'))
         ).ask()
-        
-        # Use text input with validation for stop loss
+
+        if profit_threshold.lower() in ['back', 'cancel']:
+            return 'back' if profit_threshold.lower() == 'back' else 'cancel'
+
+        self.current_context['profit_threshold'] = float(profit_threshold)
+        return 'continue'
+
+    def _configure_stop_loss(self):
         stop_loss = questionary.text(
-            "Enter stop loss threshold (0.01-1.0):",
-            validate=lambda x: self._validate_float(x, 0, 1)
+            f"Configure stop loss for {self.current_context['data_file']} (0.01-1.0):",
+            validate=lambda x: self._validate_float(x, 0, 1),
+            default=str(self.current_context.get('stop_loss', '0.01'))
         ).ask()
+
+        if stop_loss.lower() in ['back', 'cancel']:
+            return 'back' if stop_loss.lower() == 'back' else 'cancel'
+
+        self.current_context['stop_loss'] = float(stop_loss)
+        return 'continue'
+
+    def _review_strategy_config(self):
+        self.console.print("[bold]Current Strategy Configuration:[/bold]")
+        for key, value in self.current_context.items():
+            if value is not None:
+                self.console.print(f"- {key.replace('_', ' ').title()}: {value}")
         
-        # Output path (optional)
-        output_path = questionary.text(
-            "Enter strategy output path (optional):",
-            default=""
+        confirm = questionary.confirm("Are you satisfied with this configuration?").ask()
+        return 'continue' if confirm else 'back'
+
+    def _save_or_continue(self):
+        choices = ['Save Strategy', 'Continue Editing', 'Cancel']
+        choice = questionary.select(
+            "What would you like to do?",
+            choices=choices
         ).ask()
-        
-        # Convert to float
-        profit_threshold = float(profit_threshold)
-        stop_loss = float(stop_loss)
-        
-        # Temporarily print strategy details
-        self.console.print(f"[bold]Would generate strategy with:[/bold]")
-        self.console.print(f"- Data: {full_file_path}")
-        self.console.print(f"- Profit threshold: {profit_threshold}")
-        self.console.print(f"- Stop loss: {stop_loss}")
-        self.console.print(f"- Output: {output_path or 'Not specified'}")
-        
-        self.console.print("[green]Strategy generation simulated![/green]")
-        self.strategy_management_menu()
+
+        if choice == 'Save Strategy':
+            self._save_strategy()
+            return 'continue'
+        elif choice == 'Continue Editing':
+            return 'back'
+        else:
+            return 'cancel'
+
+    def _save_strategy(self):
+        # Placeholder for actual strategy saving logic
+        self.console.print("[green]Strategy saved successfully![/green]")
+        self._reset_context()
 
     def backtesting_menu(self):
         choices = [
