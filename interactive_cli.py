@@ -7,6 +7,7 @@ from rich.text import Text
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
 import questionary
+from utils.agent_config_manager import AgentConfigManager
 
 # Import functions from cli.py - commented out until we verify they exist
 # If these imports are causing issues, we'll need to implement alternatives
