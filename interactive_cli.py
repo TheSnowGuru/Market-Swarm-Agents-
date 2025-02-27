@@ -34,6 +34,7 @@ class SwarmCLI:
         
         choices = [
             "Strategy Management",
+            "Create New Agent",
             "Backtesting",
             "Agent Management", 
             "Data Management",
@@ -49,6 +50,8 @@ class SwarmCLI:
 
         if choice == "Strategy Management":
             self.strategy_management_menu()
+        elif choice == "Create New Agent":
+            self.create_agent_interactive()
         elif choice == "Backtesting":
             self.backtesting_menu()
         elif choice == "Agent Management":
@@ -76,9 +79,8 @@ class SwarmCLI:
             self.main_menu()
 
     def generate_strategy_interactive(self):
-        data_path = questionary.path(
-            "Enter market data path:", 
-            only_files=True
+        data_path = questionary.text(
+            "Enter market data path:"
         ).ask()
         
         profit_threshold = questionary.float(
@@ -91,9 +93,8 @@ class SwarmCLI:
             validate=lambda x: 0 < x <= 1
         ).ask()
         
-        output_path = questionary.path(
-            "Enter strategy output path:", 
-            only_directories=True
+        output_path = questionary.text(
+            "Enter strategy output path:"
         ).ask()
         
         # Temporarily print what would happen instead of calling the function
@@ -137,14 +138,12 @@ class SwarmCLI:
             choices=['optimal-trade', 'scalper', 'trend-follower', 'correlation']
         ).ask()
         
-        data_path = questionary.path(
-            "Enter market data path:", 
-            only_files=True
+        data_path = questionary.text(
+            "Enter market data path:"
         ).ask()
         
-        report_path = questionary.path(
-            "Enter report output path (optional):", 
-            only_directories=True
+        report_path = questionary.text(
+            "Enter report output path (optional):"
         ).ask()
         
         # Temporarily print what would happen instead of calling the function
@@ -162,6 +161,7 @@ class SwarmCLI:
             "List Available Agents",
             "Configure Agent",
             "Train Agent",
+            "Create New Agent",
             "Back to Main Menu"
         ]
         
@@ -177,25 +177,53 @@ class SwarmCLI:
             self.console.print("- TrendFollowerAgent")
             self.console.print("- OptimalTradeAgent")
             # list_agents()
+            
+            # Return to agent management menu after displaying agents
+            self.agent_management_menu()
         elif choice == "Train Agent":
             self.train_agent_interactive()
+        elif choice == "Create New Agent":
+            self.create_agent_interactive()
         elif choice == "Back to Main Menu":
             self.main_menu()
 
+    def create_agent_interactive(self):
+        agent_type = questionary.select(
+            "Select agent type to create:", 
+            choices=['scalper', 'trend-follower', 'correlation', 'optimal-trade']
+        ).ask()
+        
+        agent_name = questionary.text(
+            "Enter a name for this agent:"
+        ).ask()
+        
+        config_path = questionary.text(
+            "Enter configuration file path (optional):"
+        ).ask()
+        
+        # Temporarily print what would happen instead of calling the function
+        self.console.print(f"[bold]Would create agent with:[/bold]")
+        self.console.print(f"- Type: {agent_type}")
+        self.console.print(f"- Name: {agent_name}")
+        self.console.print(f"- Config: {config_path}")
+        
+        self.console.print("[green]Agent created successfully![/green]")
+        
+        # Return to main menu after creating agent
+        self.main_menu()
+        
     def train_agent_interactive(self):
         agent = questionary.select(
             "Select agent to train:", 
             choices=['scalper', 'trend-follower', 'correlation', 'optimal-trade']
         ).ask()
         
-        data_path = questionary.path(
-            "Enter training data path:", 
-            only_files=True
+        data_path = questionary.text(
+            "Enter training data path:"
         ).ask()
         
-        output_path = questionary.path(
-            "Enter model output path (optional):", 
-            only_directories=True
+        output_path = questionary.text(
+            "Enter model output path (optional):"
         ).ask()
         
         # Temporarily print what would happen instead of calling the function
