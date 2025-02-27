@@ -674,18 +674,61 @@ class SwarmCLI:
 
     def test_agent(self, agent_name):
         """
-        Placeholder method for testing a newly created agent
+        Test a newly created agent with optional backtest
         
         Args:
             agent_name (str): Name of the agent to test
         """
+        from utils.backtest_utils import backtest_results_manager
+        from utils.vectorbt_utils import simulate_trading_strategy
+        import pandas as pd
+        
         self.console.print(f"[yellow]Testing agent: {agent_name}[/yellow]")
-        # Implement basic agent testing logic
+        
+        # Prompt for backtest
         test_result = questionary.confirm("Would you like to run a quick backtest?").ask()
         
         if test_result:
             self.console.print("[green]Simulating backtest...[/green]")
-            # Add backtest simulation logic
+            
+            # Select market data for backtest
+            data_path = questionary.text(
+                "Enter market data path for backtest:"
+            ).ask()
+            
+            try:
+                # Load market data
+                market_data = pd.read_csv(data_path)
+                
+                # Simulate trading strategy (placeholder signals)
+                entry_signals = market_data['Close'] > market_data['Close'].rolling(20).mean()
+                exit_signals = market_data['Close'] < market_data['Close'].rolling(20).mean()
+                
+                # Run backtest simulation
+                backtest_results = simulate_trading_strategy(
+                    market_data, 
+                    entry_signals, 
+                    exit_signals
+                )
+                
+                # Save and generate shareable link
+                result_link = backtest_results_manager.save_backtest_results(
+                    backtest_results['metrics'], 
+                    agent_name
+                )
+                
+                # Display results and link
+                self.console.print("[green]Backtest Completed![/green]")
+                self.console.print(f"[bold]Backtest Metrics:[/bold]\n{backtest_results['metrics']}")
+                self.console.print(f"[blue]Backtest Results Link: {result_link}[/blue]")
+                
+                # Optional: Open results
+                open_results = questionary.confirm("Would you like to open the backtest results?").ask()
+                if open_results:
+                    backtest_results_manager.open_backtest_results(result_link)
+                
+            except Exception as e:
+                self.console.print(f"[red]Backtest failed: {e}[/red]")
         
         self.manage_agents_menu()
 
