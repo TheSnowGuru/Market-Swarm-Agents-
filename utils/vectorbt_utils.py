@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 import vectorbt as vbt
-from typing import Dict, List
+from typing import Dict, List, Any
+import matplotlib.pyplot as plt
 
 def calculate_portfolio_metrics(prices: pd.DataFrame) -> Dict[str, float]:
     """
@@ -60,9 +61,9 @@ def optimize_portfolio_allocation(prices: pd.DataFrame,
 
 def simulate_trading_strategy(prices: pd.DataFrame, 
                                entry_signals: pd.Series, 
-                               exit_signals: pd.Series) -> Dict[str, float]:
+                               exit_signals: pd.Series) -> Dict[str, Any]:
     """
-    Simulate a trading strategy and calculate performance metrics.
+    Simulate a trading strategy and calculate performance metrics with visualization.
     
     Args:
         prices (pd.DataFrame): DataFrame of asset prices
@@ -70,7 +71,7 @@ def simulate_trading_strategy(prices: pd.DataFrame,
         exit_signals (pd.Series): Exit signals for trades
     
     Returns:
-        dict: Trading strategy performance metrics
+        dict: Trading strategy performance metrics and visualization
     """
     portfolio = vbt.Portfolio.from_signals(
         prices['Close'], 
@@ -90,4 +91,25 @@ def simulate_trading_strategy(prices: pd.DataFrame,
         'trades': len(portfolio.trades)
     }
     
-    return metrics
+    # Visualization
+    plt.figure(figsize=(12, 6))
+    portfolio.total_return().plot()
+    plt.title('Cumulative Portfolio Returns')
+    plt.xlabel('Date')
+    plt.ylabel('Cumulative Returns')
+    plt.tight_layout()
+    plt.show()
+    
+    # Drawdown Plot
+    plt.figure(figsize=(12, 6))
+    portfolio.drawdown().plot()
+    plt.title('Portfolio Drawdown')
+    plt.xlabel('Date')
+    plt.ylabel('Drawdown')
+    plt.tight_layout()
+    plt.show()
+    
+    return {
+        'metrics': metrics,
+        'portfolio': portfolio
+    }
