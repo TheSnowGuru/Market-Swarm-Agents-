@@ -1,0 +1,14 @@
+{
+    "id": "efeef688-161f-42cf-81f8-fa1a0669f542",
+    "name": "ai-scalper",
+    "type": "scalper",
+    "strategy": null,
+    "version": "1.0.0",
+    "created_at": "2025-02-27T17:49:06.447097",
+    "features": [],
+    "feature_parameters": {},
+    "training_parameters": {},
+    "performance_metrics": {},
+    "last_trained": null,
+    "total_training_runs": 0
+}
