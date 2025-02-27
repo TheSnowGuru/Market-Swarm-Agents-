@@ -68,9 +68,19 @@ The **Master Agent** oversees all these agents, ranks their performance, allocat
    python -m venv venv
    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
    ```
-3. **Install Dependencies**: 
+3. **Install the Package**: 
    ```bash
-   pip install -r requirements.txt
+   # Install in editable mode with development dependencies
+   pip install -e .[dev]
+   ```
+
+4. **Run the Interactive CLI**:
+   ```bash
+   # Option 1: Using the installed command
+   swarm
+
+   # Option 2: Directly with Python
+   python interactive_cli.py
    ```
 
 ### 🖥️ Interactive CLI & Workflow
