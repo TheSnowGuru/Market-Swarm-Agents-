@@ -174,8 +174,16 @@ class SwarmCLI:
         if selected_file == 'Cancel':
             return 'cancel'
 
-        self.current_context['data_file'] = selected_file
-        return 'continue'
+        # Construct full path to the selected file
+        full_path = os.path.join('data/price_data', selected_file)
+        
+        # Validate file exists and is readable
+        if not os.path.exists(full_path):
+            self.console.print(f"[red]Error: File {full_path} does not exist.[/red]")
+            return 'back'
+
+        self.current_context['data_file'] = full_path
+        return full_path
 
     def _configure_profit_threshold(self):
         # Contextual input with navigation
@@ -266,37 +274,46 @@ class SwarmCLI:
         Returns:
             dict: Comprehensive feature and trade labeling configuration
         """
-        # 1. Feature Selection
-        available_features = [
-            'moving_average', 
-            'rsi', 
-            'macd', 
-            'bollinger_bands', 
-            'volume_trend',
-            'price_momentum',
-            'volatility_index'
-        ]
-        
-        selected_features = questionary.checkbox(
-            "Select features for strategy analysis:",
-            choices=available_features
-        ).ask()
+        # 1. Feature Selection (only if not already selected)
+        if not hasattr(self, '_selected_features'):
+            available_features = [
+                'moving_average', 
+                'rsi', 
+                'macd', 
+                'bollinger_bands', 
+                'volume_trend',
+                'price_momentum',
+                'volatility_index'
+            ]
+            
+            self._selected_features = questionary.checkbox(
+                "Select features for strategy analysis:",
+                choices=available_features
+            ).ask()
         
         # 2. Load Market Data
         try:
             df = pd.read_csv(market_data)
+            
+            # Ensure required columns exist
+            required_columns = ['Close', 'Open', 'High', 'Low', 'Volume']
+            for col in required_columns:
+                if col not in df.columns:
+                    self.console.print(f"[red]Missing required column: {col}[/red]")
+                    return None
+        
         except Exception as e:
             self.console.print(f"[red]Error loading market data: {e}[/red]")
             return None
         
         # 3. Interactive Trade Labeling
-        labeled_trades = self._label_trades_interactively(df, selected_features)
+        labeled_trades = self._label_trades_interactively(df, self._selected_features)
         
         # 4. Derive Strategy Parameters
         strategy_params = self._derive_strategy_parameters(labeled_trades)
         
         return {
-            'features': selected_features,
+            'features': self._selected_features,
             'labeled_trades': labeled_trades,
             'strategy_params': strategy_params
         }
