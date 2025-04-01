@@ -161,6 +161,7 @@ class SwarmCLI:
         for root, dirs, files in os.walk(directory):
             for file in files:
                 if file.endswith('.csv'):
+                    # Get path relative to the data/price_data directory
                     relative_path = os.path.relpath(os.path.join(root, file), directory)
                     csv_files.append(relative_path)
         
@@ -186,7 +187,14 @@ class SwarmCLI:
         # Store the full path to the data file
         data_dir = 'data/price_data'
         full_path = os.path.join(data_dir, selected_file)
+        
+        # Verify the file exists
+        if not os.path.exists(full_path):
+            self.console.print(f"[red]Error: File {full_path} does not exist.[/red]")
+            return 'back'
+            
         self.current_context['data_file'] = full_path
+        self.console.print(f"[green]Selected data file: {full_path}[/green]")
         return 'continue'
 
     def _configure_profit_threshold(self):
@@ -296,7 +304,13 @@ class SwarmCLI:
         
         # 2. Load Market Data
         try:
+            self.console.print(f"[yellow]Loading market data from: {market_data}[/yellow]")
+            if not os.path.exists(market_data):
+                self.console.print(f"[red]File not found: {market_data}[/red]")
+                return None
+                
             df = pd.read_csv(market_data)
+            self.console.print(f"[green]Successfully loaded data with {len(df)} rows[/green]")
         except Exception as e:
             self.console.print(f"[red]Error loading market data: {e}[/red]")
             return None
