@@ -153,11 +153,20 @@ class SwarmCLI:
 
     def _find_csv_files(self, directory='data/price_data'):
         csv_files = []
+        # Check if directory exists
+        if not os.path.exists(directory):
+            self.console.print(f"[yellow]Warning: Directory {directory} does not exist.[/yellow]")
+            return csv_files
+            
         for root, dirs, files in os.walk(directory):
             for file in files:
                 if file.endswith('.csv'):
                     relative_path = os.path.relpath(os.path.join(root, file), directory)
                     csv_files.append(relative_path)
+        
+        if not csv_files:
+            self.console.print(f"[yellow]No CSV files found in {directory}.[/yellow]")
+            
         return csv_files
 
     def _select_market_data(self):
@@ -174,7 +183,10 @@ class SwarmCLI:
         if selected_file == 'Cancel':
             return 'cancel'
 
-        self.current_context['data_file'] = selected_file
+        # Store the full path to the data file
+        data_dir = 'data/price_data'
+        full_path = os.path.join(data_dir, selected_file)
+        self.current_context['data_file'] = full_path
         return 'continue'
 
     def _configure_profit_threshold(self):
@@ -550,10 +562,13 @@ class SwarmCLI:
 
     def create_new_strategy_workflow(self, agent_name):
         # 1. Select Market Data
-        market_data_path = self._select_market_data()
+        result = self._select_market_data()
         
-        if market_data_path == 'back' or market_data_path == 'cancel':
+        if result == 'back' or result == 'cancel':
             return None
+        
+        # Use the actual data file path from current_context
+        market_data_path = self.current_context['data_file']
         
         # 2. Interactive Feature Selection and Trade Labeling
         strategy_config = self._select_and_label_features(market_data_path)
