@@ -340,16 +340,66 @@ class SwarmCLI:
         """
         labeled_trades = []
         
+        # First, inspect the DataFrame to find appropriate columns
+        self.console.print(f"[yellow]Available columns in dataset: {', '.join(df.columns)}[/yellow]")
+        
+        # Determine date and price columns
+        date_column = None
+        price_column = None
+        
+        # Look for date column
+        date_candidates = ['date', 'timestamp', 'time', 'datetime', 'Date', 'Timestamp', 'Time']
+        for col in date_candidates:
+            if col in df.columns:
+                date_column = col
+                break
+        
+        # Look for price column
+        price_candidates = ['close', 'price', 'Close', 'Price', 'last', 'Last']
+        for col in price_candidates:
+            if col in df.columns:
+                price_column = col
+                break
+        
+        # If we couldn't find appropriate columns, use the first column as date and second as price
+        if date_column is None and len(df.columns) > 0:
+            date_column = df.columns[0]
+            self.console.print(f"[yellow]Using '{date_column}' as date column[/yellow]")
+        
+        if price_column is None and len(df.columns) > 1:
+            price_column = df.columns[1]
+            self.console.print(f"[yellow]Using '{price_column}' as price column[/yellow]")
+        
+        # Limit to a small sample for labeling (first 5 rows)
+        sample_df = df.head(5)
+        
         # Display sample trades for labeling
-        for index, row in df.iterrows():
-            trade_details = {
-                'date': row['date'],
-                'price': row['close'],
-                **{feature: row.get(feature, 'N/A') for feature in features}
-            }
+        for index, row in sample_df.iterrows():
+            # Create trade details with available columns
+            trade_details = {}
+            
+            # Add date if available
+            if date_column:
+                trade_details['date'] = str(row[date_column])
+            
+            # Add price if available
+            if price_column:
+                trade_details['price'] = row[price_column]
+            
+            # Add any selected features that exist in the dataframe
+            for feature in features:
+                if feature in df.columns:
+                    trade_details[feature] = row[feature]
+                else:
+                    trade_details[feature] = 'N/A'
+            
+            # Show the trade details to the user
+            self.console.print(f"[bold]Trade {index + 1}:[/bold]")
+            for key, value in trade_details.items():
+                self.console.print(f"- {key}: {value}")
             
             is_good_trade = questionary.confirm(
-                f"Is this a good trade? Details:\n{trade_details}"
+                f"Is this a good trade?"
             ).ask()
             
             labeled_trades.append({
@@ -369,27 +419,73 @@ class SwarmCLI:
         Returns:
             dict: Derived strategy parameters
         """
+        # Handle the case where there are no labeled trades
+        if not labeled_trades:
+            self.console.print("[yellow]No labeled trades available. Using default parameters.[/yellow]")
+            return {
+                'profit_threshold': 0.02,
+                'stop_loss': 0.01,
+                'recommended_features': []
+            }
+            
         good_trades = [trade for trade in labeled_trades if trade['is_good_trade']]
         
+        # Handle the case where there are no good trades
+        if not good_trades:
+            self.console.print("[yellow]No good trades identified. Using default parameters.[/yellow]")
+            return {
+                'profit_threshold': 0.02,
+                'stop_loss': 0.01,
+                'recommended_features': []
+            }
+        
         # Calculate key metrics
-        metrics = {
-            'win_rate': len(good_trades) / len(labeled_trades),
-            'avg_profit': np.mean([trade['trade_details']['price'] for trade in good_trades]),
-            'volatility': np.std([trade['trade_details']['price'] for trade in good_trades])
-        }
-        
-        # Recommend strategy parameters
-        strategy_params = {
-            'profit_threshold': metrics['win_rate'],
-            'stop_loss': metrics['volatility'] * 0.5,
-            'recommended_features': list(set(
-                feature for trade in good_trades 
-                for feature in trade['trade_details'].keys() 
-                if feature not in ['date', 'price']
-            ))
-        }
-        
-        return strategy_params
+        try:
+            # Extract prices safely
+            prices = []
+            for trade in good_trades:
+                if 'price' in trade['trade_details']:
+                    price = trade['trade_details']['price']
+                    # Ensure price is a number
+                    if isinstance(price, (int, float)) or (isinstance(price, str) and price.replace('.', '', 1).isdigit()):
+                        prices.append(float(price))
+            
+            if prices:
+                win_rate = len(good_trades) / len(labeled_trades)
+                avg_profit = np.mean(prices)
+                volatility = np.std(prices) if len(prices) > 1 else 0.01
+            else:
+                self.console.print("[yellow]No valid prices found. Using default metrics.[/yellow]")
+                win_rate = 0.5
+                avg_profit = 0
+                volatility = 0.01
+                
+            metrics = {
+                'win_rate': win_rate,
+                'avg_profit': avg_profit,
+                'volatility': volatility
+            }
+            
+            # Recommend strategy parameters
+            strategy_params = {
+                'profit_threshold': max(0.01, min(0.1, metrics['win_rate'])),  # Limit between 1% and 10%
+                'stop_loss': max(0.005, min(0.05, metrics['volatility'] * 0.5)),  # Limit between 0.5% and 5%
+                'recommended_features': list(set(
+                    feature for trade in good_trades 
+                    for feature in trade['trade_details'].keys() 
+                    if feature not in ['date', 'price']
+                ))
+            }
+            
+            return strategy_params
+            
+        except Exception as e:
+            self.console.print(f"[red]Error calculating strategy parameters: {e}[/red]")
+            return {
+                'profit_threshold': 0.02,
+                'stop_loss': 0.01,
+                'recommended_features': []
+            }
 
     def backtesting_menu(self):
         choices = [
