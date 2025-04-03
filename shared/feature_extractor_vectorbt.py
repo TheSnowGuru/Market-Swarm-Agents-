@@ -40,11 +40,11 @@ def calculate_vectorbt_indicators(data: pd.DataFrame) -> pd.DataFrame:
     # Make a copy to avoid modifying the original
     df = data.copy()
     
-    # Convert to vectorbt's Series format
-    close = vbt.Series(df['Close'])
-    high = vbt.Series(df['High']) if 'High' in df.columns else None
-    low = vbt.Series(df['Low']) if 'Low' in df.columns else None
-    volume = vbt.Series(df['Volume']) if 'Volume' in df.columns else None
+    # Use pandas Series directly - vectorbt works with pandas Series
+    close = df['Close']
+    high = df['High'] if 'High' in df.columns else None
+    low = df['Low'] if 'Low' in df.columns else None
+    volume = df['Volume'] if 'Volume' in df.columns else None
     
     # Calculate RSI
     rsi = vbt.RSI.run(close, window=14).rsi
