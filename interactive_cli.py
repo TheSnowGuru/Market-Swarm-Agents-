@@ -2241,6 +2241,10 @@ def main():
     try:
         cli = SwarmCLI()
         cli.run()
+    except (KeyboardInterrupt, EOFError):
+        # Handle Ctrl+C and Ctrl+D explicitly at the top level
+        print("\nExiting SWARM Trading System...")
+        sys.exit(0)
     except Exception as e:
         # Handle the NoConsoleScreenBufferError and other exceptions
         print(f"Error: {str(e)}")
@@ -2254,6 +2258,10 @@ def main():
             os.system('cls' if os.name == 'nt' else 'clear')
             cli = SwarmCLI()
             cli.run()
+        except (KeyboardInterrupt, EOFError):
+            # Handle Ctrl+C and Ctrl+D in recovery mode
+            print("\nExiting SWARM Trading System...")
+            sys.exit(0)
         except Exception as inner_e:
             print(f"Recovery failed: {str(inner_e)}")
             print("Please try running this script in a standard command prompt window.")
