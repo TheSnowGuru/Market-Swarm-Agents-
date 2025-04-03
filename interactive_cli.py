@@ -10,6 +10,42 @@ from rich.prompt import Prompt, Confirm
 from rich.table import Table
 try:
     import questionary
+    
+    # Patch questionary to handle Ctrl+D
+    original_select = questionary.select
+    original_checkbox = questionary.checkbox
+    original_text = questionary.text
+    original_confirm = questionary.confirm
+    
+    def select_with_eof(*args, **kwargs):
+        try:
+            return original_select(*args, **kwargs)
+        except EOFError:
+            raise KeyboardInterrupt
+            
+    def checkbox_with_eof(*args, **kwargs):
+        try:
+            return original_checkbox(*args, **kwargs)
+        except EOFError:
+            raise KeyboardInterrupt
+            
+    def text_with_eof(*args, **kwargs):
+        try:
+            return original_text(*args, **kwargs)
+        except EOFError:
+            raise KeyboardInterrupt
+            
+    def confirm_with_eof(*args, **kwargs):
+        try:
+            return original_confirm(*args, **kwargs)
+        except EOFError:
+            raise KeyboardInterrupt
+            
+    questionary.select = select_with_eof
+    questionary.checkbox = checkbox_with_eof
+    questionary.text = text_with_eof
+    questionary.confirm = confirm_with_eof
+    
 except Exception as e:
     # Fallback for environments where questionary doesn't work
     class FallbackQuestionary:
