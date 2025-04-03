@@ -71,6 +71,7 @@ except Exception as e:
 from utils.agent_config_manager import AgentConfigManager
 from shared.feature_extractor_vectorbt import get_available_features, calculate_all_features
 from utils.synthetic_trade_generator import SyntheticTradeGenerator
+from utils.trade_analyzer import TradeAnalyzer
 
 # Import functions from cli.py - commented out until we verify they exist
 # If these imports are causing issues, we'll need to implement alternatives
@@ -108,6 +109,7 @@ class SwarmCLI:
         choices = [
             "Manage Agents",
             "Generate Synthetic Trades",
+            "Analyze Trades",
             "Exit"
         ]
         
@@ -120,6 +122,8 @@ class SwarmCLI:
             self.manage_agents_menu()
         elif choice == "Generate Synthetic Trades":
             self.synthetic_trades_menu()
+        elif choice == "Analyze Trades":
+            self.trade_analysis_menu()
         elif choice == "Exit":
             sys.exit(0)
 
@@ -1463,6 +1467,310 @@ class SwarmCLI:
         
         # Continue configuration
         return self.configure_trade_generation()
+        
+    def trade_analysis_menu(self):
+        """
+        Menu for trade analysis
+        """
+        choices = [
+            "Filter Profitable Trades",
+            "Identify Trade Patterns",
+            "Generate Trading Rules",
+            "Visualize Trade Analysis",
+            "Back to Main Menu"
+        ]
+        
+        choice = questionary.select(
+            "Trade Analysis Menu:", 
+            choices=choices
+        ).ask()
+
+        if choice == "Filter Profitable Trades":
+            self.filter_trades_workflow()
+        elif choice == "Identify Trade Patterns":
+            self.identify_patterns_workflow()
+        elif choice == "Generate Trading Rules":
+            self.generate_rules_workflow()
+        elif choice == "Visualize Trade Analysis":
+            self.visualize_analysis_workflow()
+        elif choice == "Back to Main Menu":
+            self.main_menu()
+    
+    def filter_trades_workflow(self):
+        """
+        Workflow for filtering profitable trades
+        """
+        # 1. Select trade file
+        trade_files = self._find_csv_files('data/synthetic_trades')
+        
+        if not trade_files:
+            self.console.print("[yellow]No synthetic trade files found. Generate trades first.[/yellow]")
+            return self.trade_analysis_menu()
+        
+        # Add back option
+        trade_files.append('Back')
+        
+        selected_file = questionary.select(
+            "Select trade file to analyze:",
+            choices=trade_files
+        ).ask()
+        
+        if selected_file == 'Back':
+            return self.trade_analysis_menu()
+        
+        file_path = os.path.join('data/synthetic_trades', selected_file)
+        
+        # 2. Configure filtering parameters
+        min_profit = questionary.text(
+            "Minimum profit percentage to consider a trade profitable:",
+            validate=lambda x: self._validate_float(x, 0, 100),
+            default="1.0"
+        ).ask()
+        
+        min_rr = questionary.text(
+            "Minimum risk/reward ratio:",
+            validate=lambda x: self._validate_float(x, 0, 10),
+            default="1.5"
+        ).ask()
+        
+        max_duration = questionary.text(
+            "Maximum trade duration (in bars):",
+            validate=lambda x: x.isdigit(),
+            default="100"
+        ).ask()
+        
+        # 3. Perform filtering
+        self.console.print("[bold green]Filtering profitable trades...[/bold green]")
+        
+        try:
+            # Initialize analyzer
+            analyzer = TradeAnalyzer({
+                'min_profit_threshold': float(min_profit),
+                'min_risk_reward': float(min_rr),
+                'max_duration': int(max_duration)
+            })
+            
+            # Load and filter trades
+            analyzer.load_trades(file_path)
+            filtered_trades = analyzer.filter_profitable_trades()
+            
+            if len(filtered_trades) == 0:
+                self.console.print("[red]No trades met the filtering criteria.[/red]")
+                return self.trade_analysis_menu()
+            
+            # Display statistics
+            stats = analyzer.get_summary_statistics()
+            self._display_trade_statistics(stats)
+            
+            # Save filtered trades
+            save_filtered = questionary.confirm("Save filtered trades to CSV?").ask()
+            
+            if save_filtered:
+                output_path = analyzer.save_filtered_trades()
+                self.console.print(f"[green]Filtered trades saved to: {output_path}[/green]")
+            
+            # Continue to pattern identification?
+            continue_to_patterns = questionary.confirm("Continue to pattern identification?").ask()
+            
+            if continue_to_patterns:
+                # Store analyzer in instance for next step
+                self.trade_analyzer = analyzer
+                return self.identify_patterns_workflow(analyzer)
+            
+            # Return to menu
+            return self.trade_analysis_menu()
+            
+        except Exception as e:
+            self.console.print(f"[red]Error filtering trades: {e}[/red]")
+            import traceback
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            return self.trade_analysis_menu()
+    
+    def identify_patterns_workflow(self, analyzer=None):
+        """
+        Workflow for identifying trade patterns
+        
+        Args:
+            analyzer (TradeAnalyzer, optional): Existing analyzer with filtered trades
+        """
+        if analyzer is None:
+            # Check if we have a stored analyzer
+            if hasattr(self, 'trade_analyzer'):
+                analyzer = self.trade_analyzer
+            else:
+                self.console.print("[yellow]No filtered trades available. Filter trades first.[/yellow]")
+                return self.trade_analysis_menu()
+        
+        # Configure clustering parameters
+        n_clusters = questionary.text(
+            "Number of clusters for pattern identification:",
+            validate=lambda x: x.isdigit() and int(x) > 0,
+            default="3"
+        ).ask()
+        
+        # Perform pattern identification
+        self.console.print("[bold green]Identifying trade patterns...[/bold green]")
+        
+        try:
+            # Identify patterns
+            patterns = analyzer.identify_trade_patterns(int(n_clusters))
+            
+            # Calculate feature importance
+            importance = analyzer.calculate_feature_importance()
+            
+            # Display patterns
+            self.console.print("[bold]Identified Trade Patterns:[/bold]")
+            
+            for pattern_id, pattern in patterns.items():
+                self.console.print(f"\n[bold cyan]{pattern_id}[/bold cyan]")
+                self.console.print(f"Trade Count: {pattern['trade_count']}")
+                self.console.print(f"Average Profit: {pattern['avg_profit']:.2f}%")
+                self.console.print(f"Win Rate: {pattern['win_rate']:.2f}")
+                
+                # Display top features for this pattern
+                self.console.print("\nKey Feature Values:")
+                for feature, value in pattern['feature_values'].items():
+                    if feature in importance and importance[feature] > 0.05:
+                        self.console.print(f"- {feature}: {value:.4f} (importance: {importance[feature]:.4f})")
+            
+            # Continue to rule generation?
+            continue_to_rules = questionary.confirm("Continue to trading rule generation?").ask()
+            
+            if continue_to_rules:
+                return self.generate_rules_workflow(analyzer)
+            
+            # Return to menu
+            return self.trade_analysis_menu()
+            
+        except Exception as e:
+            self.console.print(f"[red]Error identifying patterns: {e}[/red]")
+            import traceback
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            return self.trade_analysis_menu()
+    
+    def generate_rules_workflow(self, analyzer=None):
+        """
+        Workflow for generating trading rules
+        
+        Args:
+            analyzer (TradeAnalyzer, optional): Existing analyzer with identified patterns
+        """
+        if analyzer is None:
+            # Check if we have a stored analyzer
+            if hasattr(self, 'trade_analyzer'):
+                analyzer = self.trade_analyzer
+                
+                # Check if patterns have been identified
+                if analyzer.trade_patterns is None:
+                    self.console.print("[yellow]No patterns identified. Identify patterns first.[/yellow]")
+                    return self.trade_analysis_menu()
+            else:
+                self.console.print("[yellow]No patterns identified. Identify patterns first.[/yellow]")
+                return self.trade_analysis_menu()
+        
+        # Generate trading rules
+        self.console.print("[bold green]Generating trading rules...[/bold green]")
+        
+        try:
+            # Generate rules
+            rules = analyzer.generate_trade_rules()
+            
+            if not rules:
+                self.console.print("[yellow]No significant trading rules could be generated.[/yellow]")
+                return self.trade_analysis_menu()
+            
+            # Display rules
+            self.console.print("[bold]Generated Trading Rules:[/bold]")
+            
+            for i, rule in enumerate(rules, 1):
+                self.console.print(f"\n[bold cyan]Rule #{i} (Pattern: {rule['pattern_id']})[/bold cyan]")
+                self.console.print(f"Expected Profit: {rule['expected_profit']:.2f}%")
+                self.console.print(f"Win Rate: {rule['win_rate']:.2f}")
+                self.console.print(f"Based on {rule['trade_count']} trades")
+                
+                # Display conditions
+                self.console.print("\nEntry Conditions:")
+                for cond in rule['conditions']:
+                    self.console.print(f"- {cond['feature']} {cond['operator']} {cond['threshold']:.4f} (importance: {cond['importance']:.4f})")
+            
+            # Save rules to file
+            save_rules = questionary.confirm("Save trading rules to file?").ask()
+            
+            if save_rules:
+                # Create output directory
+                os.makedirs('data/trading_rules', exist_ok=True)
+                
+                # Generate filename
+                timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+                output_path = f'data/trading_rules/rules_{timestamp}.json'
+                
+                # Save rules
+                with open(output_path, 'w') as f:
+                    import json
+                    json.dump(rules, f, indent=4)
+                
+                self.console.print(f"[green]Trading rules saved to: {output_path}[/green]")
+            
+            # Visualize analysis?
+            visualize = questionary.confirm("Visualize trade analysis?").ask()
+            
+            if visualize:
+                return self.visualize_analysis_workflow(analyzer)
+            
+            # Return to menu
+            return self.trade_analysis_menu()
+            
+        except Exception as e:
+            self.console.print(f"[red]Error generating rules: {e}[/red]")
+            import traceback
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            return self.trade_analysis_menu()
+    
+    def visualize_analysis_workflow(self, analyzer=None):
+        """
+        Workflow for visualizing trade analysis
+        
+        Args:
+            analyzer (TradeAnalyzer, optional): Existing analyzer with completed analysis
+        """
+        if analyzer is None:
+            # Check if we have a stored analyzer
+            if hasattr(self, 'trade_analyzer'):
+                analyzer = self.trade_analyzer
+                
+                # Check if analysis has been performed
+                if analyzer.filtered_trades is None:
+                    self.console.print("[yellow]No analysis performed. Filter trades first.[/yellow]")
+                    return self.trade_analysis_menu()
+            else:
+                self.console.print("[yellow]No analysis performed. Filter trades first.[/yellow]")
+                return self.trade_analysis_menu()
+        
+        # Generate visualizations
+        self.console.print("[bold green]Generating visualizations...[/bold green]")
+        
+        try:
+            # Create visualizations
+            output_dir = analyzer.visualize_patterns()
+            
+            self.console.print(f"[green]Visualizations saved to: {output_dir}[/green]")
+            
+            # Open visualizations?
+            open_viz = questionary.confirm("Open visualizations folder?").ask()
+            
+            if open_viz:
+                # Open folder in file explorer
+                import subprocess
+                os.startfile(output_dir) if os.name == 'nt' else subprocess.call(['xdg-open', output_dir])
+            
+            # Return to menu
+            return self.trade_analysis_menu()
+            
+        except Exception as e:
+            self.console.print(f"[red]Error generating visualizations: {e}[/red]")
+            import traceback
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            return self.trade_analysis_menu()
 
     def run(self):
         try:

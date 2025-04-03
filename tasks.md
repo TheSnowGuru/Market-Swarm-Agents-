@@ -105,10 +105,10 @@ Compute trade metrics (PnL %, duration, volatility context, feature )
 - [x] Optimize with numba/vectorbt for fast processing
 
 ### Trade Analysis
-- [ ] Filter trades that meet profitability goals
-- [ ] Group by patterns or conditions
-- [ ] Analyze trade characteristics
-- [ ] Create trade classification system
+- [x] Filter trades that meet profitability goals
+- [x] Group by patterns or conditions
+- [x] Analyze trade characteristics
+- [x] Create trade classification system
 
 ### Strategy Generation
 - [ ] Analyze filtered trades
