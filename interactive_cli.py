@@ -424,7 +424,33 @@ class SwarmCLI:
             self.console.print("[yellow]Initializing vectorbt engine...[/yellow]")
             df = calculate_all_features(df)
             self.console.print("[green]Features calculated successfully![/green]")
-        
+            
+            # Ask if user wants to generate synthetic trades with these features
+            generate_trades = questionary.confirm(
+                "Would you like to generate synthetic trades using these features?"
+            ).ask()
+            
+            if generate_trades:
+                # Get agent name for the trades
+                agent_name = self.current_context.get('agent_name', 'unnamed_agent')
+                
+                # Generate synthetic trades
+                trades_path = self.generate_synthetic_trades_for_agent(agent_name, self._selected_features, market_data)
+                
+                if trades_path:
+                    # Ask if user wants to continue with feature selection or analyze trades
+                    analyze_trades = questionary.confirm(
+                        "Would you like to analyze these trades now instead of continuing with feature selection?"
+                    ).ask()
+                    
+                    if analyze_trades:
+                        # Initialize analyzer with the generated trades
+                        analyzer = TradeAnalyzer()
+                        analyzer.load_trades(trades_path)
+                        self.trade_analyzer = analyzer
+                        self.filter_trades_workflow()
+                        return None
+            
         except Exception as e:
             self.console.print(f"[red]Error loading market data or calculating features: {e}[/red]")
             import traceback
