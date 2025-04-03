@@ -108,7 +108,6 @@ class SwarmCLI:
         
         choices = [
             "Manage Agents",
-            "Generate Synthetic Trades",
             "Analyze Trades",
             "Exit"
         ]
@@ -120,8 +119,6 @@ class SwarmCLI:
 
         if choice == "Manage Agents":
             self.manage_agents_menu()
-        elif choice == "Generate Synthetic Trades":
-            self.synthetic_trades_menu()
         elif choice == "Analyze Trades":
             self.trade_analysis_menu()
         elif choice == "Exit":
@@ -790,7 +787,133 @@ class SwarmCLI:
                     'threshold': threshold
                 }
         
-        # 5. Automatic Training
+        # 5. Generate Synthetic Trades
+        generate_trades = questionary.confirm(
+            f"Would you like to generate synthetic trades for {agent_name} based on selected features?"
+        ).ask()
+        
+        if generate_trades:
+            # Use the same market data and features to generate synthetic trades
+            self.console.print(f"[yellow]Generating synthetic trades for {agent_name}...[/yellow]")
+            
+            # Get market data path from strategy creation
+            market_data_path = market_data_path if 'market_data_path' in locals() else self._select_market_data()
+            
+            if market_data_path != 'back' and market_data_path != 'cancel':
+                # Configure trade generation parameters
+                self.console.print("[bold]Configure Synthetic Trade Parameters:[/bold]")
+                
+                # Configure risk/reward parameters
+                rr_ratio = questionary.text(
+                    "Enter risk/reward ratio (e.g., 2.0 means TP is 2x SL):",
+                    validate=lambda x: self._validate_float(x, 0.1, 10),
+                    default="2.0"
+                ).ask()
+                
+                stop_loss = questionary.text(
+                    "Enter stop loss percentage (e.g., 0.01 for 1%):",
+                    validate=lambda x: self._validate_float(x, 0.001, 0.1),
+                    default="0.01"
+                ).ask()
+                
+                # Calculate take profit based on RR ratio
+                take_profit = float(stop_loss) * float(rr_ratio)
+                
+                # Generate entry/exit conditions based on selected features
+                entry_conditions = {}
+                exit_conditions = {}
+                
+                # Create default conditions based on selected features
+                for feature in features:
+                    if feature == 'rsi':
+                        entry_conditions['rsi'] = {'below': 30}
+                        exit_conditions['rsi'] = {'above': 70}
+                    elif feature == 'macd':
+                        entry_conditions['macd_hist'] = {'cross_above': 0}
+                        exit_conditions['macd_hist'] = {'cross_below': 0}
+                    elif feature == 'bollinger_bands':
+                        entry_conditions['bb_lower'] = {'below': 0}
+                        exit_conditions['bb_upper'] = {'above': 0}
+                    elif feature in ['sma_20', 'ema_20']:
+                        entry_conditions[feature] = {'cross_above': 0}
+                        exit_conditions[feature] = {'cross_below': 0}
+                
+                # Allow user to customize conditions
+                customize_conditions = questionary.confirm(
+                    "Would you like to customize entry/exit conditions?"
+                ).ask()
+                
+                if customize_conditions:
+                    self.console.print("[yellow]Configuring entry conditions...[/yellow]")
+                    entry_conditions = self._configure_trade_conditions("entry")
+                    
+                    self.console.print("[yellow]Configuring exit conditions...[/yellow]")
+                    exit_conditions = self._configure_trade_conditions("exit")
+                
+                # Configure additional parameters
+                save_winning_only = questionary.confirm(
+                    "Save only winning trades?"
+                ).ask()
+                
+                min_profit = "0.0"
+                if save_winning_only:
+                    min_profit = questionary.text(
+                        "Minimum profit percentage to consider a winning trade:",
+                        validate=lambda x: self._validate_float(x, 0, 100),
+                        default="0.0"
+                    ).ask()
+                
+                # Generate trades
+                self.console.print("[bold green]Generating synthetic trades...[/bold green]")
+                
+                try:
+                    # Load market data
+                    df = pd.read_csv(market_data_path)
+                    
+                    # Configure trade generator
+                    config = {
+                        'risk_reward_ratio': float(rr_ratio),
+                        'stop_loss_pct': float(stop_loss),
+                        'take_profit_pct': take_profit,
+                        'save_winning_only': save_winning_only,
+                        'min_profit_threshold': float(min_profit)
+                    }
+                    
+                    generator = SyntheticTradeGenerator(config)
+                    
+                    # Generate trades
+                    trades_df = generator.generate_trades(df, entry_conditions, exit_conditions)
+                    
+                    if len(trades_df) == 0:
+                        self.console.print("[red]No trades were generated with the given parameters.[/red]")
+                    else:
+                        # Display trade statistics
+                        stats = generator.get_trade_statistics()
+                        self._display_trade_statistics(stats)
+                        
+                        # Save trades with agent name in filename
+                        save_trades = questionary.confirm("Save generated trades to CSV?").ask()
+                        
+                        if save_trades:
+                            # Create directory if it doesn't exist
+                            os.makedirs('data/synthetic_trades', exist_ok=True)
+                            
+                            # Generate filename with agent name
+                            timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+                            filename = f'{agent_name}_trades_{timestamp}.csv'
+                            
+                            output_path = generator.save_trades(filename=filename)
+                            self.console.print(f"[green]Trades saved to: {output_path}[/green]")
+                            
+                            # Link trades to agent configuration
+                            agent_config['synthetic_trades_path'] = output_path
+                    
+                except Exception as e:
+                    self.console.print(f"[red]Error generating synthetic trades: {e}[/red]")
+                    import traceback
+                    self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        
+        # 6. Automatic Training
         self.console.print(f"[yellow]Automatically training {agent_name}...[/yellow]")
         
         # Generate Agent Configuration
@@ -819,12 +942,24 @@ class SwarmCLI:
             choices=[
                 "Back to Agent Management",
                 "Test Agent",
+                "Analyze Trades",
                 "Create Another Agent"
             ]
         ).ask()
         
         if next_action == "Test Agent":
             self.test_agent(agent_name)
+        elif next_action == "Analyze Trades":
+            # Check if we generated trades for this agent
+            if 'synthetic_trades_path' in agent_config and os.path.exists(agent_config['synthetic_trades_path']):
+                # Initialize analyzer with the agent's trades
+                analyzer = TradeAnalyzer()
+                analyzer.load_trades(agent_config['synthetic_trades_path'])
+                self.trade_analyzer = analyzer
+                self.trade_analysis_menu()
+            else:
+                self.console.print("[yellow]No trades available for analysis. Generate trades first.[/yellow]")
+                self.manage_agents_menu()
         elif next_action == "Create Another Agent":
             self.create_agent_workflow()
         else:
@@ -1061,30 +1196,136 @@ class SwarmCLI:
         
         self.manage_agents_menu()
 
-    def synthetic_trades_menu(self):
+    def generate_synthetic_trades_for_agent(self, agent_name, features, market_data_path=None):
         """
-        Menu for synthetic trade generation
-        """
-        choices = [
-            "Generate New Synthetic Trades",
-            "View Existing Synthetic Trades",
-            "Configure Trade Generation Parameters",
-            "Back to Main Menu"
-        ]
+        Generate synthetic trades specifically for an agent
         
-        choice = questionary.select(
-            "Synthetic Trades Menu:", 
-            choices=choices
+        Args:
+            agent_name (str): Name of the agent
+            features (list): Features selected for the agent
+            market_data_path (str, optional): Path to market data
+            
+        Returns:
+            str: Path to saved trades or None
+        """
+        # If no market data provided, ask for it
+        if not market_data_path:
+            market_data_path = self._select_market_data()
+            
+            if market_data_path == 'back' or market_data_path == 'cancel':
+                return None
+        
+        # Configure risk/reward parameters
+        rr_ratio = questionary.text(
+            "Enter risk/reward ratio (e.g., 2.0 means TP is 2x SL):",
+            validate=lambda x: self._validate_float(x, 0.1, 10),
+            default="2.0"
         ).ask()
-
-        if choice == "Generate New Synthetic Trades":
-            self.generate_synthetic_trades_workflow()
-        elif choice == "View Existing Synthetic Trades":
-            self.view_synthetic_trades()
-        elif choice == "Configure Trade Generation Parameters":
-            self.configure_trade_generation()
-        elif choice == "Back to Main Menu":
-            self.main_menu()
+        
+        stop_loss = questionary.text(
+            "Enter stop loss percentage (e.g., 0.01 for 1%):",
+            validate=lambda x: self._validate_float(x, 0.001, 0.1),
+            default="0.01"
+        ).ask()
+        
+        # Calculate take profit based on RR ratio
+        take_profit = float(stop_loss) * float(rr_ratio)
+        
+        # Generate entry/exit conditions based on selected features
+        entry_conditions = {}
+        exit_conditions = {}
+        
+        # Create default conditions based on selected features
+        for feature in features:
+            if feature == 'rsi':
+                entry_conditions['rsi'] = {'below': 30}
+                exit_conditions['rsi'] = {'above': 70}
+            elif feature == 'macd':
+                entry_conditions['macd_hist'] = {'cross_above': 0}
+                exit_conditions['macd_hist'] = {'cross_below': 0}
+            elif feature == 'bollinger_bands':
+                entry_conditions['bb_lower'] = {'below': 0}
+                exit_conditions['bb_upper'] = {'above': 0}
+            elif feature in ['sma_20', 'ema_20']:
+                entry_conditions[feature] = {'cross_above': 0}
+                exit_conditions[feature] = {'cross_below': 0}
+        
+        # Allow user to customize conditions
+        customize_conditions = questionary.confirm(
+            "Would you like to customize entry/exit conditions?"
+        ).ask()
+        
+        if customize_conditions:
+            self.console.print("[yellow]Configuring entry conditions...[/yellow]")
+            entry_conditions = self._configure_trade_conditions("entry")
+            
+            self.console.print("[yellow]Configuring exit conditions...[/yellow]")
+            exit_conditions = self._configure_trade_conditions("exit")
+        
+        # Configure additional parameters
+        save_winning_only = questionary.confirm(
+            "Save only winning trades?"
+        ).ask()
+        
+        min_profit = "0.0"
+        if save_winning_only:
+            min_profit = questionary.text(
+                "Minimum profit percentage to consider a winning trade:",
+                validate=lambda x: self._validate_float(x, 0, 100),
+                default="0.0"
+            ).ask()
+        
+        # Generate trades
+        self.console.print("[bold green]Generating synthetic trades...[/bold green]")
+        
+        try:
+            # Load market data
+            df = pd.read_csv(market_data_path)
+            
+            # Configure trade generator
+            config = {
+                'risk_reward_ratio': float(rr_ratio),
+                'stop_loss_pct': float(stop_loss),
+                'take_profit_pct': take_profit,
+                'save_winning_only': save_winning_only,
+                'min_profit_threshold': float(min_profit)
+            }
+            
+            generator = SyntheticTradeGenerator(config)
+            
+            # Generate trades
+            trades_df = generator.generate_trades(df, entry_conditions, exit_conditions)
+            
+            if len(trades_df) == 0:
+                self.console.print("[red]No trades were generated with the given parameters.[/red]")
+                return None
+            
+            # Display trade statistics
+            stats = generator.get_trade_statistics()
+            self._display_trade_statistics(stats)
+            
+            # Save trades with agent name in filename
+            save_trades = questionary.confirm("Save generated trades to CSV?").ask()
+            
+            if save_trades:
+                # Create directory if it doesn't exist
+                os.makedirs('data/synthetic_trades', exist_ok=True)
+                
+                # Generate filename with agent name
+                timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+                filename = f'{agent_name}_trades_{timestamp}.csv'
+                
+                output_path = generator.save_trades(filename=filename)
+                self.console.print(f"[green]Trades saved to: {output_path}[/green]")
+                return output_path
+            
+            return None
+            
+        except Exception as e:
+            self.console.print(f"[red]Error generating synthetic trades: {e}[/red]")
+            import traceback
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            return None
     
     def generate_synthetic_trades_workflow(self):
         """
@@ -1473,6 +1714,8 @@ class SwarmCLI:
         Menu for trade analysis
         """
         choices = [
+            "Generate Trades for Existing Agent",
+            "View Existing Trades",
             "Filter Profitable Trades",
             "Identify Trade Patterns",
             "Generate Trading Rules",
@@ -1485,7 +1728,11 @@ class SwarmCLI:
             choices=choices
         ).ask()
 
-        if choice == "Filter Profitable Trades":
+        if choice == "Generate Trades for Existing Agent":
+            self.generate_trades_for_agent_workflow()
+        elif choice == "View Existing Trades":
+            self.view_synthetic_trades()
+        elif choice == "Filter Profitable Trades":
             self.filter_trades_workflow()
         elif choice == "Identify Trade Patterns":
             self.identify_patterns_workflow()
@@ -1724,6 +1971,76 @@ class SwarmCLI:
             self.console.print(f"[red]Error generating rules: {e}[/red]")
             import traceback
             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            return self.trade_analysis_menu()
+    
+    def generate_trades_for_agent_workflow(self):
+        """
+        Workflow to generate synthetic trades for an existing agent
+        """
+        # 1. Select an Agent
+        agents = self._list_existing_agents()
+        
+        # Filter out menu options
+        actual_agents = [agent for agent in agents if agent not in ['Create New Agent', 'Back to Main Menu']]
+        
+        if not actual_agents:
+            self.console.print("[yellow]No existing agents found. Create an agent first.[/yellow]")
+            return self.trade_analysis_menu()
+        
+        # Add back option
+        agent_choices = actual_agents + ['Back']
+        
+        selected_agent = questionary.select(
+            "Select an agent to generate trades for:",
+            choices=agent_choices
+        ).ask()
+        
+        if selected_agent == 'Back':
+            return self.trade_analysis_menu()
+        
+        # 2. Load agent configuration
+        config_manager = AgentConfigManager()
+        agent_config = config_manager.load_agent_config(selected_agent)
+        
+        if not agent_config:
+            self.console.print(f"[red]Could not load configuration for agent: {selected_agent}[/red]")
+            return self.trade_analysis_menu()
+        
+        # 3. Extract features from agent config
+        features = agent_config.get('features', [])
+        
+        if not features:
+            self.console.print("[yellow]No features found in agent configuration. Please select features:[/yellow]")
+            available_features = get_available_features()
+            features = questionary.checkbox(
+                "Select features for trade generation:",
+                choices=available_features
+            ).ask()
+            
+            if not features:
+                return self.trade_analysis_menu()
+        
+        # 4. Generate trades for the agent
+        trades_path = self.generate_synthetic_trades_for_agent(selected_agent, features)
+        
+        if trades_path:
+            # Update agent configuration with trades path
+            agent_config['synthetic_trades_path'] = trades_path
+            config_manager.save_agent_config(agent_config)
+            
+            # Ask if user wants to analyze the trades
+            analyze_trades = questionary.confirm("Would you like to analyze these trades now?").ask()
+            
+            if analyze_trades:
+                # Initialize analyzer with the agent's trades
+                analyzer = TradeAnalyzer()
+                analyzer.load_trades(trades_path)
+                self.trade_analyzer = analyzer
+                self.filter_trades_workflow()
+            else:
+                return self.trade_analysis_menu()
+        else:
+            self.console.print("[yellow]No trades were generated or saved.[/yellow]")
             return self.trade_analysis_menu()
     
     def visualize_analysis_workflow(self, analyzer=None):
