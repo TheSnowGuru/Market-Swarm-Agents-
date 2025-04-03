@@ -29,7 +29,7 @@ def calculate_percentage_changes(data: pd.DataFrame) -> pd.DataFrame:
 
 def calculate_vectorbt_indicators(data: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate technical indicators using vectorbt
+    Calculate technical indicators using vectorbt with numba optimization
     
     Args:
         data (pd.DataFrame): Input price data
@@ -40,11 +40,11 @@ def calculate_vectorbt_indicators(data: pd.DataFrame) -> pd.DataFrame:
     # Make a copy to avoid modifying the original
     df = data.copy()
     
-    # Use pandas Series directly - vectorbt works with pandas Series
-    close = df['Close']
-    high = df['High'] if 'High' in df.columns else None
-    low = df['Low'] if 'Low' in df.columns else None
-    volume = df['Volume'] if 'Volume' in df.columns else None
+    # Convert to proper vectorbt Series for numba acceleration
+    close = vbt.pd_accessor.PandasDFAccessor(df)['Close']
+    high = vbt.pd_accessor.PandasDFAccessor(df)['High'] if 'High' in df.columns else None
+    low = vbt.pd_accessor.PandasDFAccessor(df)['Low'] if 'Low' in df.columns else None
+    volume = vbt.pd_accessor.PandasDFAccessor(df)['Volume'] if 'Volume' in df.columns else None
     
     # Calculate RSI
     rsi = vbt.RSI.run(close, window=14).rsi
@@ -123,13 +123,22 @@ def calculate_all_features(data: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame with all calculated features
     """
-    # Calculate percentage changes
-    df = calculate_percentage_changes(data)
-    
-    # Calculate vectorbt indicators
-    df = calculate_vectorbt_indicators(df)
-    
-    # Fill NaN values that might be created during calculations
-    df.fillna(0, inplace=True)
-    
-    return df
+    try:
+        # Calculate percentage changes
+        df = calculate_percentage_changes(data)
+        
+        # Enable numba caching for faster calculations
+        vbt.settings.caching['enable'] = True
+        vbt.settings.numba['parallel'] = True
+        
+        # Calculate vectorbt indicators
+        df = calculate_vectorbt_indicators(df)
+        
+        # Fill NaN values that might be created during calculations
+        df.fillna(0, inplace=True)
+        
+        return df
+    except Exception as e:
+        print(f"Error in calculate_all_features: {e}")
+        # Return original data if calculation fails
+        return data

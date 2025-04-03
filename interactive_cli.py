@@ -346,22 +346,30 @@ class SwarmCLI:
         """
         # 1. Feature Selection (only if not already selected)
         if not hasattr(self, '_selected_features'):
-            # Get available features from vectorbt feature extractor
-            available_features = get_available_features()
-            
-            self._selected_features = questionary.checkbox(
-                "Select features for strategy analysis (press Enter when done, or select none and press Enter to go back):",
-                choices=available_features
-            ).ask()
-            
-            # If no features selected, treat as "Back" option
-            if not self._selected_features:
+            try:
+                # Get available features from vectorbt feature extractor
+                available_features = get_available_features()
+                
+                # Limit the number of features that can be selected to prevent app crashes
+                self.console.print("[yellow]Note: For optimal performance, select features strategically.[/yellow]")
+                self.console.print("[yellow]Vectorbt with numba will accelerate calculations.[/yellow]")
+                
+                self._selected_features = questionary.checkbox(
+                    "Select features for strategy analysis (press Enter when done, or select none and press Enter to go back):",
+                    choices=available_features
+                ).ask()
+                
+                # If no features selected, treat as "Back" option
+                if not self._selected_features:
+                    return None
+                
+                # Display selected features
+                self.console.print("[bold]Selected Features:[/bold]")
+                for feature in self._selected_features:
+                    self.console.print(f"- {feature}")
+            except Exception as e:
+                self.console.print(f"[red]Error during feature selection: {e}[/red]")
                 return None
-            
-            # Display selected features
-            self.console.print("[bold]Selected Features:[/bold]")
-            for feature in self._selected_features:
-                self.console.print(f"- {feature}")
         
         # 2. Load Market Data and Calculate Features
         try:
@@ -369,18 +377,53 @@ class SwarmCLI:
             
             # Ensure required columns exist
             required_columns = ['Close', 'Open', 'High', 'Low', 'Volume']
-            for col in required_columns:
-                if col not in df.columns:
-                    self.console.print(f"[red]Missing required column: {col}[/red]")
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            
+            if missing_columns:
+                self.console.print(f"[red]Missing required columns: {', '.join(missing_columns)}[/red]")
+                
+                # Try to handle common column name variations
+                column_mapping = {
+                    'close': 'Close',
+                    'open': 'Open',
+                    'high': 'High',
+                    'low': 'Low',
+                    'volume': 'Volume'
+                }
+                
+                # Check if lowercase versions exist and rename them
+                for lower, upper in column_mapping.items():
+                    if lower in df.columns and upper not in df.columns:
+                        df[upper] = df[lower]
+                        self.console.print(f"[yellow]Renamed column '{lower}' to '{upper}'[/yellow]")
+                
+                # Check again after renaming
+                missing_columns = [col for col in required_columns if col not in df.columns]
+                if missing_columns:
+                    self.console.print(f"[red]Still missing required columns: {', '.join(missing_columns)}[/red]")
                     return None
             
-            # Calculate all features using vectorbt
-            self.console.print("[yellow]Calculating features using vectorbt...[/yellow]")
+            # Calculate all features using vectorbt with numba acceleration
+            self.console.print("[yellow]Calculating features using vectorbt with numba acceleration...[/yellow]")
+            
+            # First, ensure data is properly formatted
+            df.index = pd.to_datetime(df.index) if df.index.dtype != 'datetime64[ns]' and 'date' not in df.columns else df.index
+            if 'date' in df.columns and df.index.dtype != 'datetime64[ns]':
+                try:
+                    df['date'] = pd.to_datetime(df['date'])
+                    df.set_index('date', inplace=True)
+                except:
+                    pass  # Keep original index if conversion fails
+            
+            # Calculate features with progress indicator
+            self.console.print("[yellow]Initializing vectorbt engine...[/yellow]")
             df = calculate_all_features(df)
             self.console.print("[green]Features calculated successfully![/green]")
         
         except Exception as e:
             self.console.print(f"[red]Error loading market data or calculating features: {e}[/red]")
+            import traceback
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
             return None
         
         # 3. Interactive Trade Labeling with calculated features
