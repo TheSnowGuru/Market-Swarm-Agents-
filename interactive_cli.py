@@ -221,8 +221,8 @@ class SwarmCLI:
         return csv_files
 
     def _select_market_data(self):
-        # Enhanced file selection with back/cancel options
-        choices = self._find_csv_files() + ['Back', 'Cancel']
+        # Enhanced file selection with back option
+        choices = self._find_csv_files() + ['Back']
         
         selected_file = questionary.select(
             "Select market data file:",
@@ -231,8 +231,6 @@ class SwarmCLI:
 
         if selected_file == 'Back':
             return 'back'
-        if selected_file == 'Cancel':
-            return 'cancel'
 
         # Construct full path to the selected file
         full_path = os.path.join('data/price_data', selected_file)
@@ -248,26 +246,26 @@ class SwarmCLI:
     def _configure_profit_threshold(self):
         # Contextual input with navigation
         profit_threshold = questionary.text(
-            f"Configure profit threshold for {self.current_context['data_file']} (0.01-1.0):",
-            validate=lambda x: self._validate_float(x, 0, 1, param_type='profit_threshold'),
+            f"Configure profit threshold for {self.current_context['data_file']} (0.01-1.0) or 'back' to return:",
+            validate=lambda x: self._validate_float(x, 0, 1, param_type='profit_threshold') or x.lower() == 'back',
             default=str(self.current_context.get('profit_threshold', '0.02'))
         ).ask()
 
-        if profit_threshold.lower() in ['back', 'cancel']:
-            return 'back' if profit_threshold.lower() == 'back' else 'cancel'
+        if profit_threshold.lower() == 'back':
+            return 'back'
 
         self.current_context['profit_threshold'] = float(profit_threshold)
         return 'continue'
 
     def _configure_stop_loss(self):
         stop_loss = questionary.text(
-            f"Configure stop loss for {self.current_context['data_file']} (0.01-0.05):",
-            validate=lambda x: self._validate_float(x, 0, 0.05, param_type='stop_loss'),
+            f"Configure stop loss for {self.current_context['data_file']} (0.01-0.05) or 'back' to return:",
+            validate=lambda x: self._validate_float(x, 0, 0.05, param_type='stop_loss') or x.lower() == 'back',
             default=str(self.current_context.get('stop_loss', '0.01'))
         ).ask()
 
-        if stop_loss.lower() in ['back', 'cancel']:
-            return 'back' if stop_loss.lower() == 'back' else 'cancel'
+        if stop_loss.lower() == 'back':
+            return 'back'
 
         self.current_context['stop_loss'] = float(stop_loss)
         return 'continue'
@@ -278,11 +276,21 @@ class SwarmCLI:
             if value is not None:
                 self.console.print(f"- {key.replace('_', ' ').title()}: {value}")
         
-        confirm = questionary.confirm("Are you satisfied with this configuration?").ask()
-        return 'continue' if confirm else 'back'
+        choices = ["Yes, continue", "No, go back", "Cancel"]
+        response = questionary.select(
+            "Are you satisfied with this configuration?",
+            choices=choices
+        ).ask()
+        
+        if response == "Yes, continue":
+            return 'continue'
+        elif response == "No, go back":
+            return 'back'
+        else:
+            return 'cancel'
 
     def _save_or_continue(self):
-        choices = ['Save Strategy', 'Continue Editing', 'Cancel']
+        choices = ['Save Strategy', 'Continue Editing', 'Back to Main Menu']
         choice = questionary.select(
             "What would you like to do?",
             choices=choices
@@ -294,6 +302,8 @@ class SwarmCLI:
         elif choice == 'Continue Editing':
             return 'back'
         else:
+            self._reset_context()
+            self.main_menu()
             return 'cancel'
 
     def _save_strategy(self, strategy_name=None, market_data=None, profit_threshold=None, 
@@ -340,9 +350,13 @@ class SwarmCLI:
             available_features = get_available_features()
             
             self._selected_features = questionary.checkbox(
-                "Select features for strategy analysis:",
+                "Select features for strategy analysis (press Enter when done, or select none and press Enter to go back):",
                 choices=available_features
             ).ask()
+            
+            # If no features selected, treat as "Back" option
+            if not self._selected_features:
+                return None
             
             # Display selected features
             self.console.print("[bold]Selected Features:[/bold]")
@@ -417,14 +431,23 @@ class SwarmCLI:
             
             self.console.print(table)
             
-            is_good_trade = questionary.confirm(
-                f"Is this a good trade? Details:\n{trade_details}"
+            # Add option to go back
+            choices = ["Good Trade", "Bad Trade", "Skip", "Back to Feature Selection"]
+            trade_choice = questionary.select(
+                f"Evaluate this trade:",
+                choices=choices
             ).ask()
             
-            labeled_trades.append({
-                'trade_details': trade_details,
-                'is_good_trade': is_good_trade
-            })
+            if trade_choice == "Back to Feature Selection":
+                return None
+            elif trade_choice == "Skip":
+                continue
+            else:
+                is_good_trade = trade_choice == "Good Trade"
+                labeled_trades.append({
+                    'trade_details': trade_details,
+                    'is_good_trade': is_good_trade
+                })
         
         return labeled_trades
 
@@ -563,21 +586,31 @@ class SwarmCLI:
         # 1. Enter Agent Details
         agent_type = questionary.select(
             "Select agent type:", 
-            choices=['scalper', 'trend-follower', 'correlation', 'optimal-trade']
+            choices=['scalper', 'trend-follower', 'correlation', 'optimal-trade', 'Back']
         ).ask()
+        
+        if agent_type == 'Back':
+            return self.manage_agents_menu()
 
         agent_name = questionary.text(
-            "Enter a unique name for this agent:"
+            "Enter a unique name for this agent (or 'back' to return):"
         ).ask()
+        
+        if agent_name.lower() == 'back':
+            return self.create_agent_workflow()
 
         # 4. Strategy Selection/Creation
         strategy_choice = questionary.select(
             "Strategy Options:",
             choices=[
                 "Create New Strategy", 
-                "Use Default Strategy"
+                "Use Default Strategy",
+                "Back"
             ]
         ).ask()
+        
+        if strategy_choice == "Back":
+            return self.create_agent_workflow()
 
         if strategy_choice == "Create New Strategy":
             # This will trigger feature selection during strategy creation
@@ -595,7 +628,7 @@ class SwarmCLI:
             
             # Default feature selection
             features = questionary.checkbox(
-                "Select features for the agent:",
+                "Select features for the agent (press Enter when done, or select none and press Enter to go back):",
                 choices=[
                     'moving_average', 
                     'rsi', 
@@ -604,46 +637,106 @@ class SwarmCLI:
                     'volume_trend'
                 ]
             ).ask()
+            
+            # If no features selected, treat as "Back" option
+            if not features:
+                return self.create_agent_workflow()
         
         # 3. Feature Parameters
         feature_params = {}
         for feature in features:
             # Handle different types of features
             if feature in ['sma_20', 'ema_20']:
+                window_value = questionary.text(
+                    f"Window size for {feature} (or 'back' to return):", 
+                    validate=lambda x: x.isdigit() or x.lower() == 'back',
+                    default="20"
+                ).ask()
+                
+                if window_value.lower() == 'back':
+                    return self.create_agent_workflow()
+                    
                 feature_params[feature] = {
-                    'window': questionary.text(f"Window size for {feature}:", 
-                                               validate=lambda x: x.isdigit(),
-                                               default="20").ask()
+                    'window': window_value
                 }
             elif feature == 'rsi':
+                window = questionary.text(
+                    f"RSI Window (or 'back' to return):", 
+                    validate=lambda x: x.isdigit() or x.lower() == 'back',
+                    default="14"
+                ).ask()
+                
+                if window.lower() == 'back':
+                    return self.create_agent_workflow()
+                
+                overbought = questionary.text(
+                    f"RSI Overbought level (or 'back' to return):",
+                    validate=lambda x: x.isdigit() or x.lower() == 'back',
+                    default="70"
+                ).ask()
+                
+                if overbought.lower() == 'back':
+                    return self.create_agent_workflow()
+                
+                oversold = questionary.text(
+                    f"RSI Oversold level (or 'back' to return):",
+                    validate=lambda x: x.isdigit() or x.lower() == 'back',
+                    default="30"
+                ).ask()
+                
+                if oversold.lower() == 'back':
+                    return self.create_agent_workflow()
+                
                 feature_params[feature] = {
-                    'window': questionary.text(f"RSI Window:", 
-                                               validate=lambda x: x.isdigit(),
-                                               default="14").ask(),
-                    'overbought': questionary.text(f"RSI Overbought level:",
-                                                  validate=lambda x: x.isdigit(),
-                                                  default="70").ask(),
-                    'oversold': questionary.text(f"RSI Oversold level:",
-                                                validate=lambda x: x.isdigit(),
-                                                default="30").ask()
+                    'window': window,
+                    'overbought': overbought,
+                    'oversold': oversold
                 }
             elif feature == 'macd':
+                fast_window = questionary.text(
+                    f"MACD Fast window (or 'back' to return):",
+                    validate=lambda x: x.isdigit() or x.lower() == 'back',
+                    default="12"
+                ).ask()
+                
+                if fast_window.lower() == 'back':
+                    return self.create_agent_workflow()
+                
+                slow_window = questionary.text(
+                    f"MACD Slow window (or 'back' to return):",
+                    validate=lambda x: x.isdigit() or x.lower() == 'back',
+                    default="26"
+                ).ask()
+                
+                if slow_window.lower() == 'back':
+                    return self.create_agent_workflow()
+                
+                signal_window = questionary.text(
+                    f"MACD Signal window (or 'back' to return):",
+                    validate=lambda x: x.isdigit() or x.lower() == 'back',
+                    default="9"
+                ).ask()
+                
+                if signal_window.lower() == 'back':
+                    return self.create_agent_workflow()
+                
                 feature_params[feature] = {
-                    'fast_window': questionary.text(f"MACD Fast window:",
-                                                   validate=lambda x: x.isdigit(),
-                                                   default="12").ask(),
-                    'slow_window': questionary.text(f"MACD Slow window:",
-                                                   validate=lambda x: x.isdigit(),
-                                                   default="26").ask(),
-                    'signal_window': questionary.text(f"MACD Signal window:",
-                                                     validate=lambda x: x.isdigit(),
-                                                     default="9").ask()
+                    'fast_window': fast_window,
+                    'slow_window': slow_window,
+                    'signal_window': signal_window
                 }
             elif 'pct_change' in feature:
+                threshold = questionary.text(
+                    f"Threshold for {feature} (%) (or 'back' to return):",
+                    validate=lambda x: self._validate_float(x) or x.lower() == 'back',
+                    default="1.0"
+                ).ask()
+                
+                if threshold.lower() == 'back':
+                    return self.create_agent_workflow()
+                
                 feature_params[feature] = {
-                    'threshold': questionary.text(f"Threshold for {feature} (%):",
-                                                 validate=lambda x: self._validate_float(x),
-                                                 default="1.0").ask()
+                    'threshold': threshold
                 }
         
         # 5. Automatic Training
@@ -762,9 +855,13 @@ class SwarmCLI:
             "Strategy Options:",
             choices=[
                 "Replace/Update Strategy", 
-                "Retrain Existing Strategy"
+                "Retrain Existing Strategy",
+                "Back"
             ]
         ).ask()
+        
+        if strategy_action == "Back":
+            return self.edit_agent_workflow()
     
         if strategy_action == "Replace/Update Strategy":
             new_strategy = self.create_new_strategy_workflow(selected_agent)
@@ -854,16 +951,28 @@ class SwarmCLI:
         
         self.console.print(f"[yellow]Testing agent: {agent_name}[/yellow]")
         
-        # Prompt for backtest
-        test_result = questionary.confirm("Would you like to run a quick backtest?").ask()
+        # Prompt for backtest with back option
+        choices = ["Yes, run backtest", "No, skip backtest", "Back to agent management"]
+        test_choice = questionary.select(
+            "Would you like to run a quick backtest?",
+            choices=choices
+        ).ask()
+        
+        if test_choice == "Back to agent management":
+            return self.manage_agents_menu()
+            
+        test_result = test_choice == "Yes, run backtest"
         
         if test_result:
             self.console.print("[green]Simulating backtest...[/green]")
             
             # Select market data for backtest
             data_path = questionary.text(
-                "Enter market data path for backtest:"
+                "Enter market data path for backtest (or 'back' to return):"
             ).ask()
+            
+            if data_path.lower() == 'back':
+                return self.test_agent(agent_name)
             
             try:
                 # Load market data
@@ -918,30 +1027,19 @@ def main():
         # Handle the NoConsoleScreenBufferError and other exceptions
         print(f"Error: {str(e)}")
         print("If you're seeing a NoConsoleScreenBufferError, try running this script in a regular cmd.exe window")
-        print("or use the --no-interactive flag to disable interactive features.")
         
-        # Fallback to non-interactive mode
-        print("\nFalling back to non-interactive mode...")
-        # Implement a simple non-interactive menu here
-        print("Available options:")
-        print("1. Create Agent")
-        print("2. Edit Agent")
-        print("3. Exit")
-        choice = input("Enter your choice (1-3): ")
-        if choice == "1":
-            print("Creating agent...")
-            # Non-interactive agent creation
-        elif choice == "2":
-            print("Editing agent...")
-            # Non-interactive agent editing
-        else:
-            print("Exiting...")
+        # Simple error recovery
+        print("\nAttempting to recover...")
+        try:
+            # Try a simpler console setup
+            import os
+            os.system('cls' if os.name == 'nt' else 'clear')
+            cli = SwarmCLI()
+            cli.run()
+        except Exception as inner_e:
+            print(f"Recovery failed: {str(inner_e)}")
+            print("Please try running this script in a standard command prompt window.")
+            sys.exit(1)
 
 if __name__ == "__main__":
-    import sys
-    # Check for --no-interactive flag
-    if "--no-interactive" in sys.argv:
-        print("Running in non-interactive mode")
-        # Implement non-interactive mode here
-    else:
-        main()
+    main()
