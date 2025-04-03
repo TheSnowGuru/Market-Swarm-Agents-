@@ -99,10 +99,10 @@ Compute trade metrics (PnL %, duration, volatility context, feature )
   - Extra parameters (e.g., volatility, volume zones)
 
 ### Synthetic Data Creation
-- [ ] Load historical data for the asset/timeframe
-- [ ] Calculate chosen indicators
-- [ ] Generate synthetic trades (Buy/Sell, SL/TP, results)
-- [ ] Optimize with numba/vectorbt for fast processing
+- [x] Load historical data for the asset/timeframe
+- [x] Calculate chosen indicators
+- [x] Generate synthetic trades (Buy/Sell, SL/TP, results)
+- [x] Optimize with numba/vectorbt for fast processing
 
 ### Trade Analysis
 - [ ] Filter trades that meet profitability goals

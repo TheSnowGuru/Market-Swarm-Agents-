@@ -70,6 +70,7 @@ except Exception as e:
 
 from utils.agent_config_manager import AgentConfigManager
 from shared.feature_extractor_vectorbt import get_available_features, calculate_all_features
+from utils.synthetic_trade_generator import SyntheticTradeGenerator
 
 # Import functions from cli.py - commented out until we verify they exist
 # If these imports are causing issues, we'll need to implement alternatives
@@ -106,6 +107,7 @@ class SwarmCLI:
         
         choices = [
             "Manage Agents",
+            "Generate Synthetic Trades",
             "Exit"
         ]
         
@@ -116,6 +118,8 @@ class SwarmCLI:
 
         if choice == "Manage Agents":
             self.manage_agents_menu()
+        elif choice == "Generate Synthetic Trades":
+            self.synthetic_trades_menu()
         elif choice == "Exit":
             sys.exit(0)
 
@@ -1052,6 +1056,413 @@ class SwarmCLI:
                 self.console.print(f"[red]Backtest failed: {e}[/red]")
         
         self.manage_agents_menu()
+
+    def synthetic_trades_menu(self):
+        """
+        Menu for synthetic trade generation
+        """
+        choices = [
+            "Generate New Synthetic Trades",
+            "View Existing Synthetic Trades",
+            "Configure Trade Generation Parameters",
+            "Back to Main Menu"
+        ]
+        
+        choice = questionary.select(
+            "Synthetic Trades Menu:", 
+            choices=choices
+        ).ask()
+
+        if choice == "Generate New Synthetic Trades":
+            self.generate_synthetic_trades_workflow()
+        elif choice == "View Existing Synthetic Trades":
+            self.view_synthetic_trades()
+        elif choice == "Configure Trade Generation Parameters":
+            self.configure_trade_generation()
+        elif choice == "Back to Main Menu":
+            self.main_menu()
+    
+    def generate_synthetic_trades_workflow(self):
+        """
+        Workflow for generating synthetic trades
+        """
+        # 1. Select market data
+        market_data_path = self._select_market_data()
+        
+        if market_data_path == 'back':
+            return self.synthetic_trades_menu()
+        
+        # 2. Configure risk/reward parameters
+        rr_ratio = questionary.text(
+            "Enter risk/reward ratio (e.g., 2.0 means TP is 2x SL):",
+            validate=lambda x: self._validate_float(x, 0.1, 10),
+            default="2.0"
+        ).ask()
+        
+        stop_loss = questionary.text(
+            "Enter stop loss percentage (e.g., 0.01 for 1%):",
+            validate=lambda x: self._validate_float(x, 0.001, 0.1),
+            default="0.01"
+        ).ask()
+        
+        # Calculate take profit based on RR ratio
+        take_profit = float(stop_loss) * float(rr_ratio)
+        
+        # 3. Configure entry/exit conditions
+        self.console.print("[yellow]Configuring entry conditions...[/yellow]")
+        entry_conditions = self._configure_trade_conditions("entry")
+        
+        self.console.print("[yellow]Configuring exit conditions...[/yellow]")
+        exit_conditions = self._configure_trade_conditions("exit")
+        
+        # 4. Configure additional parameters
+        save_winning_only = questionary.confirm(
+            "Save only winning trades?"
+        ).ask()
+        
+        min_profit = "0.0"
+        if save_winning_only:
+            min_profit = questionary.text(
+                "Minimum profit percentage to consider a winning trade:",
+                validate=lambda x: self._validate_float(x, 0, 100),
+                default="0.0"
+            ).ask()
+        
+        # 5. Generate trades
+        self.console.print("[bold green]Generating synthetic trades...[/bold green]")
+        
+        try:
+            # Load market data
+            df = pd.read_csv(market_data_path)
+            
+            # Configure trade generator
+            config = {
+                'risk_reward_ratio': float(rr_ratio),
+                'stop_loss_pct': float(stop_loss),
+                'take_profit_pct': take_profit,
+                'save_winning_only': save_winning_only,
+                'min_profit_threshold': float(min_profit)
+            }
+            
+            generator = SyntheticTradeGenerator(config)
+            
+            # Generate trades
+            trades_df = generator.generate_trades(df, entry_conditions, exit_conditions)
+            
+            if len(trades_df) == 0:
+                self.console.print("[red]No trades were generated with the given parameters.[/red]")
+                return self.synthetic_trades_menu()
+            
+            # Display trade statistics
+            stats = generator.get_trade_statistics()
+            self._display_trade_statistics(stats)
+            
+            # Save trades
+            save_trades = questionary.confirm("Save generated trades to CSV?").ask()
+            
+            if save_trades:
+                output_path = generator.save_trades()
+                self.console.print(f"[green]Trades saved to: {output_path}[/green]")
+            
+            # Return to menu
+            self.synthetic_trades_menu()
+            
+        except Exception as e:
+            self.console.print(f"[red]Error generating synthetic trades: {e}[/red]")
+            import traceback
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            self.synthetic_trades_menu()
+    
+    def _configure_trade_conditions(self, condition_type):
+        """
+        Configure entry or exit conditions for trade generation
+        
+        Args:
+            condition_type (str): 'entry' or 'exit'
+            
+        Returns:
+            dict: Configured conditions
+        """
+        conditions = {}
+        
+        # Available indicators
+        indicators = [
+            'rsi', 
+            'macd', 
+            'macd_signal', 
+            'macd_hist',
+            'bb_upper', 
+            'bb_lower', 
+            'bb_middle',
+            'sma_20', 
+            'ema_20',
+            'pct_change',
+            'daily_pct_change',
+            'Back'
+        ]
+        
+        # Available operators
+        operators = {
+            'above': 'Value is above threshold',
+            'below': 'Value is below threshold',
+            'cross_above': 'Value crosses above threshold',
+            'cross_below': 'Value crosses below threshold'
+        }
+        
+        # Loop until user selects 'Done'
+        while True:
+            indicator = questionary.select(
+                f"Select indicator for {condition_type} condition (or 'Back' when done):",
+                choices=indicators
+            ).ask()
+            
+            if indicator == 'Back':
+                break
+            
+            # Select operator
+            operator_choices = list(operators.keys())
+            operator = questionary.select(
+                f"Select operator for {indicator}:",
+                choices=operator_choices
+            ).ask()
+            
+            # Get threshold value
+            threshold = questionary.text(
+                f"Enter threshold value for {indicator} {operator}:",
+                validate=lambda x: self._validate_float(x, -1000, 1000),
+                default="30" if indicator == 'rsi' and operator == 'below' else
+                       "70" if indicator == 'rsi' and operator == 'above' else
+                       "0"
+            ).ask()
+            
+            # Add condition
+            if indicator not in conditions:
+                conditions[indicator] = {}
+            
+            conditions[indicator][operator] = float(threshold)
+            
+            self.console.print(f"[green]Added condition: {indicator} {operator} {threshold}[/green]")
+        
+        return conditions
+    
+    def _display_trade_statistics(self, stats):
+        """
+        Display trade statistics in a formatted table
+        
+        Args:
+            stats (dict): Trade statistics
+        """
+        table = Table(title="Synthetic Trade Statistics")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+        
+        # Add rows for each statistic
+        for key, value in stats.items():
+            # Format percentages and ratios
+            if 'pct' in key or 'rate' in key:
+                formatted_value = f"{value:.2f}%" if isinstance(value, (int, float)) else str(value)
+            elif 'ratio' in key or 'factor' in key:
+                formatted_value = f"{value:.2f}" if isinstance(value, (int, float)) else str(value)
+            else:
+                formatted_value = str(value)
+            
+            table.add_row(key.replace('_', ' ').title(), formatted_value)
+        
+        self.console.print(table)
+    
+    def view_synthetic_trades(self):
+        """
+        View existing synthetic trade files
+        """
+        # Find CSV files in the synthetic trades directory
+        trade_files = self._find_csv_files('data/synthetic_trades')
+        
+        if not trade_files:
+            self.console.print("[yellow]No synthetic trade files found.[/yellow]")
+            return self.synthetic_trades_menu()
+        
+        # Add back option
+        trade_files.append('Back')
+        
+        # Select file to view
+        selected_file = questionary.select(
+            "Select trade file to view:",
+            choices=trade_files
+        ).ask()
+        
+        if selected_file == 'Back':
+            return self.synthetic_trades_menu()
+        
+        # Load and display trade file
+        try:
+            file_path = os.path.join('data/synthetic_trades', selected_file)
+            trades_df = pd.read_csv(file_path)
+            
+            # Display summary
+            self.console.print(f"[bold]File: {selected_file}[/bold]")
+            self.console.print(f"Total trades: {len(trades_df)}")
+            
+            # Calculate statistics
+            winning_trades = trades_df[trades_df['pnl_pct'] > 0]
+            win_rate = len(winning_trades) / len(trades_df) if len(trades_df) > 0 else 0
+            
+            self.console.print(f"Winning trades: {len(winning_trades)} ({win_rate:.2%})")
+            self.console.print(f"Average profit: {trades_df['pnl_pct'].mean():.2f}%")
+            
+            # Display sample of trades
+            self.console.print("\n[bold]Sample trades:[/bold]")
+            sample_size = min(5, len(trades_df))
+            sample = trades_df.sample(sample_size) if sample_size > 0 else trades_df
+            
+            # Create table for sample trades
+            table = Table(title=f"Sample of {sample_size} trades")
+            table.add_column("Entry Time", style="cyan")
+            table.add_column("Exit Time", style="cyan")
+            table.add_column("Direction", style="yellow")
+            table.add_column("Entry Price", style="green")
+            table.add_column("Exit Price", style="green")
+            table.add_column("PnL %", style="bold green")
+            table.add_column("Exit Type", style="magenta")
+            
+            for _, row in sample.iterrows():
+                pnl_color = "green" if row['pnl_pct'] > 0 else "red"
+                table.add_row(
+                    str(row['entry_time']),
+                    str(row['exit_time']),
+                    row['direction'],
+                    f"{row['entry_price']:.2f}",
+                    f"{row['exit_price']:.2f}",
+                    f"[{pnl_color}]{row['pnl_pct']:.2f}%[/{pnl_color}]",
+                    row['exit_type']
+                )
+            
+            self.console.print(table)
+            
+            # Options for this file
+            file_options = [
+                "View Full Details",
+                "Export to Excel",
+                "Delete File",
+                "Back to Trade Files"
+            ]
+            
+            file_action = questionary.select(
+                "Select action:",
+                choices=file_options
+            ).ask()
+            
+            if file_action == "View Full Details":
+                # Display more detailed information
+                self.console.print("\n[bold]Trade Details:[/bold]")
+                self.console.print(trades_df.describe())
+                
+            elif file_action == "Export to Excel":
+                # Export to Excel
+                excel_path = file_path.replace('.csv', '.xlsx')
+                trades_df.to_excel(excel_path, index=False)
+                self.console.print(f"[green]Exported to: {excel_path}[/green]")
+                
+            elif file_action == "Delete File":
+                # Confirm deletion
+                confirm = questionary.confirm(f"Are you sure you want to delete {selected_file}?").ask()
+                if confirm:
+                    os.remove(file_path)
+                    self.console.print(f"[yellow]Deleted: {selected_file}[/yellow]")
+            
+            # Return to view trades
+            return self.view_synthetic_trades()
+            
+        except Exception as e:
+            self.console.print(f"[red]Error viewing trade file: {e}[/red]")
+            return self.synthetic_trades_menu()
+    
+    def configure_trade_generation(self):
+        """
+        Configure default parameters for trade generation
+        """
+        # Default configuration
+        default_config = {
+            'risk_reward_ratio': 2.0,
+            'stop_loss_pct': 0.01,
+            'take_profit_pct': 0.02,
+            'max_trades_per_day': 5,
+            'min_trade_interval': 5,
+            'entry_threshold': 0.7,
+            'exit_threshold': 0.3,
+            'use_dynamic_sl_tp': False,
+            'atr_multiplier_sl': 1.5,
+            'atr_multiplier_tp': 3.0,
+            'atr_window': 14,
+            'save_winning_only': False,
+            'min_profit_threshold': 0.0
+        }
+        
+        # Load existing configuration if available
+        config_path = 'agents/configs/trade_generator_config.json'
+        config = default_config
+        
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    import json
+                    config = json.load(f)
+            except:
+                pass
+        
+        # Display current configuration
+        self.console.print("[bold]Current Trade Generation Configuration:[/bold]")
+        for key, value in config.items():
+            self.console.print(f"- {key}: {value}")
+        
+        # Select parameter to modify
+        param_choices = list(config.keys()) + ['Save and Exit', 'Back without Saving']
+        
+        param = questionary.select(
+            "Select parameter to modify:",
+            choices=param_choices
+        ).ask()
+        
+        if param == 'Save and Exit':
+            # Save configuration
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, 'w') as f:
+                import json
+                json.dump(config, f, indent=4)
+            self.console.print(f"[green]Configuration saved to: {config_path}[/green]")
+            return self.synthetic_trades_menu()
+            
+        elif param == 'Back without Saving':
+            return self.synthetic_trades_menu()
+        
+        # Modify selected parameter
+        current_value = config[param]
+        
+        if isinstance(current_value, bool):
+            # Boolean parameter
+            new_value = questionary.confirm(
+                f"Set {param} to True?",
+                default=current_value
+            ).ask()
+        else:
+            # Numeric parameter
+            new_value = questionary.text(
+                f"Enter new value for {param} (current: {current_value}):",
+                validate=lambda x: self._validate_float(x),
+                default=str(current_value)
+            ).ask()
+            
+            # Convert to appropriate type
+            if isinstance(current_value, int):
+                new_value = int(float(new_value))
+            else:
+                new_value = float(new_value)
+        
+        # Update configuration
+        config[param] = new_value
+        self.console.print(f"[green]Updated {param} to {new_value}[/green]")
+        
+        # Continue configuration
+        return self.configure_trade_generation()
 
     def run(self):
         try:
