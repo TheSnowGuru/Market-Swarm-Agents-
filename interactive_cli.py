@@ -10,6 +10,7 @@ from rich.prompt import Prompt, Confirm
 from rich.table import Table
 import questionary
 from utils.agent_config_manager import AgentConfigManager
+from shared.feature_extractor_vectorbt import get_available_features, calculate_all_features
 
 # Import functions from cli.py - commented out until we verify they exist
 # If these imports are causing issues, we'll need to implement alternatives
@@ -276,22 +277,20 @@ class SwarmCLI:
         """
         # 1. Feature Selection (only if not already selected)
         if not hasattr(self, '_selected_features'):
-            available_features = [
-                'moving_average', 
-                'rsi', 
-                'macd', 
-                'bollinger_bands', 
-                'volume_trend',
-                'price_momentum',
-                'volatility_index'
-            ]
+            # Get available features from vectorbt feature extractor
+            available_features = get_available_features()
             
             self._selected_features = questionary.checkbox(
                 "Select features for strategy analysis:",
                 choices=available_features
             ).ask()
+            
+            # Display selected features
+            self.console.print("[bold]Selected Features:[/bold]")
+            for feature in self._selected_features:
+                self.console.print(f"- {feature}")
         
-        # 2. Load Market Data
+        # 2. Load Market Data and Calculate Features
         try:
             df = pd.read_csv(market_data)
             
@@ -301,12 +300,17 @@ class SwarmCLI:
                 if col not in df.columns:
                     self.console.print(f"[red]Missing required column: {col}[/red]")
                     return None
+            
+            # Calculate all features using vectorbt
+            self.console.print("[yellow]Calculating features using vectorbt...[/yellow]")
+            df = calculate_all_features(df)
+            self.console.print("[green]Features calculated successfully![/green]")
         
         except Exception as e:
-            self.console.print(f"[red]Error loading market data: {e}[/red]")
+            self.console.print(f"[red]Error loading market data or calculating features: {e}[/red]")
             return None
         
-        # 3. Interactive Trade Labeling
+        # 3. Interactive Trade Labeling with calculated features
         labeled_trades = self._label_trades_interactively(df, self._selected_features)
         
         # 4. Derive Strategy Parameters
@@ -323,7 +327,7 @@ class SwarmCLI:
         Interactive trade labeling interface
         
         Args:
-            df (pd.DataFrame): Market price data
+            df (pd.DataFrame): Market price data with calculated features
             features (list): Selected features
         
         Returns:
@@ -331,13 +335,28 @@ class SwarmCLI:
         """
         labeled_trades = []
         
+        # Create a table to display feature values
+        table = Table(title="Feature Values")
+        table.add_column("Feature", style="cyan")
+        table.add_column("Value", style="green")
+        
         # Display sample trades for labeling
         for index, row in df.iterrows():
+            # Create a dictionary of trade details
             trade_details = {
-                'date': row['date'],
-                'price': row['close'],
+                'date': row.get('date', str(index)),
+                'price': row.get('Close', row.get('close', 0)),
                 **{feature: row.get(feature, 'N/A') for feature in features}
             }
+            
+            # Display feature values in a table
+            self.console.print(f"[bold]Trade at {trade_details['date']} - Price: {trade_details['price']}[/bold]")
+            
+            for feature in features:
+                if feature in row:
+                    table.add_row(feature, str(round(row[feature], 4) if isinstance(row[feature], (int, float)) else row[feature]))
+            
+            self.console.print(table)
             
             is_good_trade = questionary.confirm(
                 f"Is this a good trade? Details:\n{trade_details}"
@@ -530,12 +549,43 @@ class SwarmCLI:
         # 3. Feature Parameters
         feature_params = {}
         for feature in features:
-            if feature == 'moving_average':
+            # Handle different types of features
+            if feature in ['sma_20', 'ema_20']:
                 feature_params[feature] = {
-                    'window': questionary.text(f"MA Window for {feature}:", 
-                                               validate=lambda x: x.isdigit()).ask()
+                    'window': questionary.text(f"Window size for {feature}:", 
+                                               validate=lambda x: x.isdigit(),
+                                               default="20").ask()
                 }
-            # Add more feature-specific parameter inputs
+            elif feature == 'rsi':
+                feature_params[feature] = {
+                    'window': questionary.text(f"RSI Window:", 
+                                               validate=lambda x: x.isdigit(),
+                                               default="14").ask(),
+                    'overbought': questionary.text(f"RSI Overbought level:",
+                                                  validate=lambda x: x.isdigit(),
+                                                  default="70").ask(),
+                    'oversold': questionary.text(f"RSI Oversold level:",
+                                                validate=lambda x: x.isdigit(),
+                                                default="30").ask()
+                }
+            elif feature == 'macd':
+                feature_params[feature] = {
+                    'fast_window': questionary.text(f"MACD Fast window:",
+                                                   validate=lambda x: x.isdigit(),
+                                                   default="12").ask(),
+                    'slow_window': questionary.text(f"MACD Slow window:",
+                                                   validate=lambda x: x.isdigit(),
+                                                   default="26").ask(),
+                    'signal_window': questionary.text(f"MACD Signal window:",
+                                                     validate=lambda x: x.isdigit(),
+                                                     default="9").ask()
+                }
+            elif 'pct_change' in feature:
+                feature_params[feature] = {
+                    'threshold': questionary.text(f"Threshold for {feature} (%):",
+                                                 validate=lambda x: self._validate_float(x),
+                                                 default="1.0").ask()
+                }
         
         # 5. Automatic Training
         self.console.print(f"[yellow]Automatically training {agent_name}...[/yellow]")
