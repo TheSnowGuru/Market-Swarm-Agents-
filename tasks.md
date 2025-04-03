@@ -30,7 +30,7 @@ Compute trade metrics (PnL %, duration, volatility context, feature )
 - [ ] **3. Filter Profitable Trades**  
   - from the synthtic trade data we will save a df of winning trade only according to RR threshold that we set in the cli
   - Filter trades that meet profitability goal of RR 
-  - Group by patterns or conditions (PnL %, duration, volatility context, feature ) 
+  - Group by  (PnL %, duration, volatility context, feature ) 
 
 - [ ] **4. generating optimal Trading Rules**  
   - Analyze filtered trades  
