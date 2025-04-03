@@ -32,7 +32,9 @@ class SyntheticTradeGenerator:
             'atr_multiplier_tp': 3.0,  # ATR multiplier for take profit
             'atr_window': 14,          # ATR calculation window
             'save_winning_only': False, # Save only winning trades
-            'min_profit_threshold': 0.0 # Minimum profit to consider a winning trade
+            'min_profit_threshold': 0.0, # Minimum profit to consider a winning trade
+            'account_size': 10000.0,   # Default account size in dollars
+            'trade_size': 100000.0     # Default trade size in dollars (for leverage)
         }
         
         # Update default config with provided config
@@ -216,7 +218,9 @@ class SyntheticTradeGenerator:
             exits=exit_signals,
             sl_stop=self.config['stop_loss_pct'],
             tp_stop=self.config['take_profit_pct'],
-            freq='1D'  # Adjust based on your data frequency
+            freq='1D',  # Adjust based on your data frequency
+            init_cash=self.config['account_size'],
+            size=self.config['trade_size'] / df['Close'].iloc[0]  # Convert dollar amount to units
         )
         
         # Get trade details
@@ -238,6 +242,8 @@ class SyntheticTradeGenerator:
             'direction': np.where(trade_records['direction'] == 0, 'short', 'long'),
             'pnl': trade_records['pnl'],
             'pnl_pct': trade_records['return'] * 100,
+            'size': trade_records['size'],
+            'value': trade_records['value'],
             'duration': trade_records['exit_idx'] - trade_records['entry_idx'],
             'exit_type': np.where(
                 trade_records['status'] == 1, 

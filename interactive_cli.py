@@ -881,6 +881,19 @@ class SwarmCLI:
                 # Calculate take profit based on RR ratio
                 take_profit = float(stop_loss) * float(rr_ratio)
                 
+                # Configure account and trade size
+                account_size = questionary.text(
+                    "Enter account size in dollars:",
+                    validate=lambda x: self._validate_float(x, 100, 10000000),
+                    default="10000"
+                ).ask()
+                
+                trade_size = questionary.text(
+                    "Enter trade size in dollars (can be larger than account for leverage):",
+                    validate=lambda x: self._validate_float(x, 100, 10000000),
+                    default="100000"
+                ).ask()
+                
                 # Generate entry/exit conditions based on selected features
                 entry_conditions = {}
                 exit_conditions = {}
@@ -938,7 +951,9 @@ class SwarmCLI:
                         'stop_loss_pct': float(stop_loss),
                         'take_profit_pct': take_profit,
                         'save_winning_only': save_winning_only,
-                        'min_profit_threshold': float(min_profit)
+                        'min_profit_threshold': float(min_profit),
+                        'account_size': float(account_size),
+                        'trade_size': float(trade_size)
                     }
                     
                     generator = SyntheticTradeGenerator(config)
@@ -988,6 +1003,10 @@ class SwarmCLI:
             features=features,
             feature_params=feature_params
         )
+        
+        # Display agent configuration summary
+        self.console.print("[bold]Agent Configuration Summary:[/bold]")
+        self._display_agent_config_summary(agent_config)
         
         # Train Agent
         trained_model = self.train_agent(agent_name, agent_type, selected_strategy)
@@ -1295,6 +1314,19 @@ class SwarmCLI:
         # Calculate take profit based on RR ratio
         take_profit = float(stop_loss) * float(rr_ratio)
         
+        # Configure account and trade size
+        account_size = questionary.text(
+            "Enter account size in dollars:",
+            validate=lambda x: self._validate_float(x, 100, 10000000),
+            default="10000"
+        ).ask()
+        
+        trade_size = questionary.text(
+            "Enter trade size in dollars (can be larger than account for leverage):",
+            validate=lambda x: self._validate_float(x, 100, 10000000),
+            default="100000"
+        ).ask()
+        
         # Generate entry/exit conditions based on selected features
         entry_conditions = {}
         exit_conditions = {}
@@ -1352,7 +1384,9 @@ class SwarmCLI:
                 'stop_loss_pct': float(stop_loss),
                 'take_profit_pct': take_profit,
                 'save_winning_only': save_winning_only,
-                'min_profit_threshold': float(min_profit)
+                'min_profit_threshold': float(min_profit),
+                'account_size': float(account_size),
+                'trade_size': float(trade_size)
             }
             
             generator = SyntheticTradeGenerator(config)
@@ -2037,6 +2071,43 @@ class SwarmCLI:
             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
             return self.trade_analysis_menu()
     
+    def _display_agent_config_summary(self, agent_config):
+        """
+        Display a summarized view of agent configuration
+        
+        Args:
+            agent_config (dict): Agent configuration dictionary
+        """
+        table = Table(title=f"Agent Configuration: {agent_config.get('agent_name', 'Unknown')}")
+        table.add_column("Parameter", style="cyan")
+        table.add_column("Value", style="green")
+        
+        # Basic agent info
+        table.add_row("Agent Type", agent_config.get('agent_type', 'Unknown'))
+        table.add_row("Strategy", agent_config.get('strategy', 'Unknown'))
+        
+        # Features
+        features = agent_config.get('features', [])
+        if features:
+            table.add_row("Features", ", ".join(features))
+        
+        # Feature parameters
+        feature_params = agent_config.get('feature_params', {})
+        if feature_params:
+            for feature, params in feature_params.items():
+                param_str = ", ".join([f"{k}: {v}" for k, v in params.items()])
+                table.add_row(f"{feature} Parameters", param_str)
+        
+        # Other parameters
+        for key, value in agent_config.items():
+            if key not in ['agent_name', 'agent_type', 'strategy', 'features', 'feature_params']:
+                if isinstance(value, dict):
+                    # Skip complex nested dictionaries
+                    continue
+                table.add_row(key.replace('_', ' ').title(), str(value))
+        
+        self.console.print(table)
+    
     def generate_trades_for_agent_workflow(self):
         """
         Workflow to generate synthetic trades for an existing agent
@@ -2069,6 +2140,10 @@ class SwarmCLI:
         if not agent_config:
             self.console.print(f"[red]Could not load configuration for agent: {selected_agent}[/red]")
             return self.trade_analysis_menu()
+            
+        # Display agent configuration summary
+        self.console.print("[bold]Agent Configuration Summary:[/bold]")
+        self._display_agent_config_summary(agent_config)
         
         # 3. Extract features from agent config
         features = agent_config.get('features', [])
