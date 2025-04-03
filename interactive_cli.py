@@ -796,8 +796,8 @@ class SwarmCLI:
             # Use the same market data and features to generate synthetic trades
             self.console.print(f"[yellow]Generating synthetic trades for {agent_name}...[/yellow]")
             
-            # Get market data path from strategy creation
-            market_data_path = market_data_path if 'market_data_path' in locals() else self._select_market_data()
+            # Get market data path
+            market_data_path = self._select_market_data()
             
             if market_data_path != 'back' and market_data_path != 'cancel':
                 # Configure trade generation parameters
@@ -905,7 +905,9 @@ class SwarmCLI:
                             output_path = generator.save_trades(filename=filename)
                             self.console.print(f"[green]Trades saved to: {output_path}[/green]")
                             
-                            # Link trades to agent configuration
+                            # Store the path in the agent configuration that will be saved later
+                            if 'agent_config' not in locals():
+                                agent_config = {}
                             agent_config['synthetic_trades_path'] = output_path
                     
                 except Exception as e:
