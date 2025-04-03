@@ -131,6 +131,14 @@ class SwarmCLI:
             'agent_type': None,
             'agent_name': None
         }
+        self.current_selections = {}
+        self.display_width = 80  # Default width for the terminal
+        try:
+            # Try to get the actual terminal width
+            terminal_width = os.get_terminal_size().columns
+            self.display_width = terminal_width
+        except:
+            pass
 
     def display_banner(self):
         banner = """
@@ -686,9 +694,10 @@ class SwarmCLI:
             self.main_menu()
 
     def create_agent_workflow(self):
-        # Reset any previous feature selections
+        # Reset any previous feature selections and current selections
         if hasattr(self, '_selected_features'):
             delattr(self, '_selected_features')
+        self._clear_selections()
         
         # Initialize Configuration Manager
         config_manager = AgentConfigManager()
@@ -701,6 +710,8 @@ class SwarmCLI:
         
         if agent_type == 'Back':
             return self.manage_agents_menu()
+        
+        self._update_selection("Agent Type", agent_type)
 
         agent_name = questionary.text(
             "Enter a unique name for this agent (or 'back' to return):"
@@ -708,6 +719,8 @@ class SwarmCLI:
         
         if agent_name.lower() == 'back':
             return self.create_agent_workflow()
+        
+        self._update_selection("Agent Name", agent_name)
 
         # 4. Strategy Selection/Creation
         strategy_choice = questionary.select(
@@ -721,6 +734,8 @@ class SwarmCLI:
         
         if strategy_choice == "Back":
             return self.create_agent_workflow()
+        
+        self._update_selection("Strategy Choice", strategy_choice)
 
         if strategy_choice == "Create New Strategy":
             # This will trigger feature selection during strategy creation
@@ -732,9 +747,12 @@ class SwarmCLI:
             
             # Use features from strategy creation
             features = getattr(self, '_selected_features', [])
+            self._update_selection("Strategy", selected_strategy)
+            self._update_selection("Features", features)
         else:
             # Use a default strategy based on agent type
             selected_strategy = f"{agent_type}_default_strategy"
+            self._update_selection("Strategy", selected_strategy)
             
             # Default feature selection
             features = questionary.checkbox(
@@ -751,6 +769,8 @@ class SwarmCLI:
             # If no features selected, treat as "Back" option
             if not features:
                 return self.create_agent_workflow()
+            
+            self._update_selection("Features", features)
         
         # 3. Feature Parameters
         feature_params = {}
@@ -769,6 +789,7 @@ class SwarmCLI:
                 feature_params[feature] = {
                     'window': window_value
                 }
+                self._update_selection(f"{feature} Window", window_value)
             elif feature == 'rsi':
                 window = questionary.text(
                     f"RSI Window (or 'back' to return):", 
@@ -779,6 +800,8 @@ class SwarmCLI:
                 if window.lower() == 'back':
                     return self.create_agent_workflow()
                 
+                self._update_selection("RSI Window", window)
+                
                 overbought = questionary.text(
                     f"RSI Overbought level (or 'back' to return):",
                     validate=lambda x: x.isdigit() or x.lower() == 'back',
@@ -788,6 +811,8 @@ class SwarmCLI:
                 if overbought.lower() == 'back':
                     return self.create_agent_workflow()
                 
+                self._update_selection("RSI Overbought", overbought)
+                
                 oversold = questionary.text(
                     f"RSI Oversold level (or 'back' to return):",
                     validate=lambda x: x.isdigit() or x.lower() == 'back',
@@ -796,6 +821,8 @@ class SwarmCLI:
                 
                 if oversold.lower() == 'back':
                     return self.create_agent_workflow()
+                
+                self._update_selection("RSI Oversold", oversold)
                 
                 feature_params[feature] = {
                     'window': window,
@@ -812,6 +839,8 @@ class SwarmCLI:
                 if fast_window.lower() == 'back':
                     return self.create_agent_workflow()
                 
+                self._update_selection("MACD Fast", fast_window)
+                
                 slow_window = questionary.text(
                     f"MACD Slow window (or 'back' to return):",
                     validate=lambda x: x.isdigit() or x.lower() == 'back',
@@ -821,6 +850,8 @@ class SwarmCLI:
                 if slow_window.lower() == 'back':
                     return self.create_agent_workflow()
                 
+                self._update_selection("MACD Slow", slow_window)
+                
                 signal_window = questionary.text(
                     f"MACD Signal window (or 'back' to return):",
                     validate=lambda x: x.isdigit() or x.lower() == 'back',
@@ -829,6 +860,8 @@ class SwarmCLI:
                 
                 if signal_window.lower() == 'back':
                     return self.create_agent_workflow()
+                
+                self._update_selection("MACD Signal", signal_window)
                 
                 feature_params[feature] = {
                     'fast_window': fast_window,
@@ -845,6 +878,8 @@ class SwarmCLI:
                 if threshold.lower() == 'back':
                     return self.create_agent_workflow()
                 
+                self._update_selection(f"{feature} Threshold", threshold)
+                
                 feature_params[feature] = {
                     'threshold': threshold
                 }
@@ -853,6 +888,8 @@ class SwarmCLI:
         generate_trades = questionary.confirm(
             f"Would you like to generate synthetic trades for {agent_name} based on selected features?"
         ).ask()
+        
+        self._update_selection("Generate Trades", "Yes" if generate_trades else "No")
         
         if generate_trades:
             # Use the same market data and features to generate synthetic trades
@@ -872,14 +909,19 @@ class SwarmCLI:
                     default="2.0"
                 ).ask()
                 
+                self._update_selection("Risk/Reward Ratio", rr_ratio)
+                
                 stop_loss = questionary.text(
                     "Enter stop loss percentage (e.g., 0.01 for 1%):",
                     validate=lambda x: self._validate_float(x, 0.001, 0.1),
                     default="0.01"
                 ).ask()
                 
+                self._update_selection("Stop Loss", f"{float(stop_loss)*100}%")
+                
                 # Calculate take profit based on RR ratio
                 take_profit = float(stop_loss) * float(rr_ratio)
+                self._update_selection("Take Profit", f"{take_profit*100}%")
                 
                 # Configure account and trade size
                 account_size = questionary.text(
@@ -888,11 +930,15 @@ class SwarmCLI:
                     default="10000"
                 ).ask()
                 
+                self._update_selection("Account Size", f"${account_size}")
+                
                 trade_size = questionary.text(
                     "Enter trade size in dollars (can be larger than account for leverage):",
                     validate=lambda x: self._validate_float(x, 100, 10000000),
                     default="100000"
                 ).ask()
+                
+                self._update_selection("Trade Size", f"${trade_size}")
                 
                 # Generate entry/exit conditions based on selected features
                 entry_conditions = {}
@@ -1106,6 +1152,9 @@ class SwarmCLI:
             return ['Create New Agent', 'Back to Main Menu']
 
     def edit_agent_workflow(self):
+        # Clear any previous selections
+        self._clear_selections()
+        
         # 1. Select an Agent
         agents = self._list_existing_agents()
         selected_agent = questionary.select(
@@ -1118,6 +1167,21 @@ class SwarmCLI:
             return self.create_agent_workflow()
         elif selected_agent == 'Back to Main Menu':
             return self.manage_agents_menu()
+        
+        self._update_selection("Agent", selected_agent)
+        
+        # Load agent configuration to display
+        config_manager = AgentConfigManager()
+        agent_config = config_manager.load_agent_config(selected_agent)
+        
+        if agent_config:
+            # Update selections with current config
+            if 'agent_type' in agent_config:
+                self._update_selection("Agent Type", agent_config['agent_type'])
+            if 'strategy' in agent_config:
+                self._update_selection("Strategy", agent_config['strategy'])
+            if 'features' in agent_config:
+                self._update_selection("Features", agent_config['features'])
     
         # 2. Strategy Options
         strategy_action = questionary.select(
@@ -1131,6 +1195,8 @@ class SwarmCLI:
         
         if strategy_action == "Back":
             return self.edit_agent_workflow()
+        
+        self._update_selection("Action", strategy_action)
     
         if strategy_action == "Replace/Update Strategy":
             new_strategy = self.create_new_strategy_workflow(selected_agent)
@@ -2070,6 +2136,64 @@ class SwarmCLI:
             import traceback
             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
             return self.trade_analysis_menu()
+    
+    def _display_selections_panel(self):
+        """
+        Display current selections in a panel on the right side of the terminal
+        """
+        if not self.current_selections:
+            return
+        
+        # Calculate panel width - use about 1/3 of the terminal width
+        panel_width = min(40, self.display_width // 3)
+        
+        # Create a table for the selections
+        table = Table(box=None, padding=0, expand=False, width=panel_width)
+        table.add_column("Parameter", style="cyan", width=panel_width // 2)
+        table.add_column("Value", style="green", width=panel_width // 2)
+        
+        # Add rows for each selection
+        for key, value in self.current_selections.items():
+            if isinstance(value, list):
+                value_str = ", ".join(value) if len(value) <= 3 else f"{len(value)} items"
+            elif isinstance(value, dict):
+                value_str = f"{len(value)} parameters"
+            else:
+                value_str = str(value)
+            
+            # Truncate long values
+            if len(value_str) > panel_width // 2 - 2:
+                value_str = value_str[:panel_width // 2 - 5] + "..."
+                
+            table.add_row(key.replace('_', ' ').title(), value_str)
+        
+        # Create a panel with the table
+        panel = Panel(
+            table,
+            title="[bold]Current Selections[/bold]",
+            border_style="blue",
+            width=panel_width
+        )
+        
+        # Print the panel to the right side of the terminal
+        self.console.print(panel, justify="right")
+    
+    def _update_selection(self, key, value):
+        """
+        Update the current selections and display the panel
+        
+        Args:
+            key (str): Selection key
+            value: Selection value
+        """
+        self.current_selections[key] = value
+        self._display_selections_panel()
+    
+    def _clear_selections(self):
+        """
+        Clear the current selections
+        """
+        self.current_selections = {}
     
     def _display_agent_config_summary(self, agent_config):
         """
