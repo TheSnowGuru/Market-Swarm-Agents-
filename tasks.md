@@ -1,35 +1,48 @@
 ### Task List for Developer
 
-- [ ] **User Input Setup**  
-  - Build a CLI to collect:  
+- [x] **1. User Input Setup and interface**  
+  - Build a CLI to collect and control the strategy and agents:  
     - Asset (e.g., BTC/USD, AAPL)  
     - Timeframe (e.g., 1m, 5m, 1h)  
     - Indicators (e.g., EMA, RSI)  
     - Extra parameters (e.g., volatility, volume zones)
 
-- [ ] **Synthetic Data Creation**  
+- [ ] **2. Synthetic Data Creation**  
   - Load historical data for the asset/timeframe  
-  - Calculate chosen indicators  
-  - Generate synthetic trades (Buy/Sell, SL/TP, results, indicator values at trade entry and exit)  
+  - Calculate chosen indicators of the agent in order to create a strategy 
+  - Generate synthetic trades (Buy/Sell trades , loop at each bar, SL/TP, results, indicator values at trade entry and exit)  
   - use numba by vectorbt for fast processing of data.
-  
+  Generate Synthetic Trades
 
-- [ ] **Filter Profitable Trades**  
-  - from the synthtic trade data we will save a df of winning trade only according to treshold
-  - Filter trades that meet profitability goals  
-  - (Optional) Group by patterns or conditions
+Loop through each candle/bar to simulate trades:
 
-- [ ] **Create Trading Rules**  
+For each trade:
+
+Determine entry price, buy sell signal, Apply Stop-Loss (SL) and Take-Profit (TP) targets (fixed or dynamic) and also have a parameter for called RR, which is the ratio between tp/sl and this can be played with during the cli setup to create the syntetic data. 
+
+Track trade exit based on SL/TP hit , save only winning trades in a csv.
+
+Record indicator values at entry and exit (for strategy training) all data should be saved, indicators, and time
+
+Compute trade metrics (PnL %, duration, volatility context, feature ) 
+
+
+- [ ] **3. Filter Profitable Trades**  
+  - from the synthtic trade data we will save a df of winning trade only according to RR threshold that we set in the cli
+  - Filter trades that meet profitability goal of RR 
+  - Group by patterns or conditions (PnL %, duration, volatility context, feature ) 
+
+- [ ] **4. generating optimal Trading Rules**  
   - Analyze filtered trades  
   - Make simple "if-then" rules (e.g., "If RSI < 30 and EMA rises, Buy")  
   - Save rules as a strategy profile
   - find better way to generate a strategy using decision trees or machine learning algofeatur
 
-- [ ] **Run Backtest**  
-  - Use vectorbt to test the strategy  
+- [ ] **5. Run Backtest of the generated strategy**  
+  - Use vectorbt to test the strategy  and see a plot
   - Show results: win rate, Sharpe ratio, PnL curve, drawdown
 
-- [ ] **Connect to Master Agent**  
+- [ ] **6. Connect to Master Agent**  
   - Send Strategy ID, backtest results, and trade summary to Master Agent  
   - Allow Master Agent to track and adjust agent performance# SWARM Trading System Tasks
 
@@ -40,7 +53,7 @@
 - [x] Add support for different timeframes
 - [x] Create feature extraction pipeline
 - [x] Implement vectorbt indicators with numba acceleration
-- [ ] Add support for custom indicators
+- [ ] Add support for custom indicators creattion by vectorbt IndicatorFactory class(not now)
 - [ ] Implement data normalization techniques
 
 ### Agent Development
