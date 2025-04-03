@@ -1776,7 +1776,7 @@ class SwarmCLI:
         try:
             while True:
                 self.main_menu()
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):  # EOFError is triggered by Ctrl+D
             self.console.print("\n[yellow]Exiting SWARM Trading System...[/yellow]")
             sys.exit(0)
 
