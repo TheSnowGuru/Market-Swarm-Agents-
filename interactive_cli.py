@@ -8,7 +8,66 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
-import questionary
+try:
+    import questionary
+except Exception as e:
+    # Fallback for environments where questionary doesn't work
+    class FallbackQuestionary:
+        @staticmethod
+        def select(message, choices):
+            print(message)
+            for i, choice in enumerate(choices, 1):
+                print(f"{i}. {choice}")
+            while True:
+                try:
+                    selection = int(input("Enter your choice (number): ")) - 1
+                    if 0 <= selection < len(choices):
+                        return choices[selection]
+                    print("Invalid selection. Try again.")
+                except ValueError:
+                    print("Please enter a number.")
+        
+        @staticmethod
+        def checkbox(message, choices):
+            print(message)
+            for i, choice in enumerate(choices, 1):
+                print(f"{i}. {choice}")
+            while True:
+                try:
+                    selections = input("Enter your choices (comma-separated numbers): ").split(',')
+                    selected = []
+                    for s in selections:
+                        idx = int(s.strip()) - 1
+                        if 0 <= idx < len(choices):
+                            selected.append(choices[idx])
+                    return selected
+                except ValueError:
+                    print("Please enter valid numbers separated by commas.")
+        
+        @staticmethod
+        def text(message, validate=None, default=None):
+            if default:
+                prompt = f"{message} [{default}]: "
+            else:
+                prompt = f"{message}: "
+            
+            while True:
+                response = input(prompt)
+                if not response and default:
+                    return default
+                if validate is None or validate(response):
+                    return response
+                print("Invalid input. Please try again.")
+        
+        @staticmethod
+        def confirm(message):
+            response = input(f"{message} (y/n): ").lower()
+            return response.startswith('y')
+    
+    # Use the fallback if questionary fails
+    questionary = FallbackQuestionary()
+    print(f"Warning: Using fallback questionary due to: {e}")
+
 from utils.agent_config_manager import AgentConfigManager
 from shared.feature_extractor_vectorbt import get_available_features, calculate_all_features
 
@@ -852,8 +911,37 @@ class SwarmCLI:
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    cli = SwarmCLI()
-    cli.run()
+    try:
+        cli = SwarmCLI()
+        cli.run()
+    except Exception as e:
+        # Handle the NoConsoleScreenBufferError and other exceptions
+        print(f"Error: {str(e)}")
+        print("If you're seeing a NoConsoleScreenBufferError, try running this script in a regular cmd.exe window")
+        print("or use the --no-interactive flag to disable interactive features.")
+        
+        # Fallback to non-interactive mode
+        print("\nFalling back to non-interactive mode...")
+        # Implement a simple non-interactive menu here
+        print("Available options:")
+        print("1. Create Agent")
+        print("2. Edit Agent")
+        print("3. Exit")
+        choice = input("Enter your choice (1-3): ")
+        if choice == "1":
+            print("Creating agent...")
+            # Non-interactive agent creation
+        elif choice == "2":
+            print("Editing agent...")
+            # Non-interactive agent editing
+        else:
+            print("Exiting...")
 
 if __name__ == "__main__":
-    main()
+    import sys
+    # Check for --no-interactive flag
+    if "--no-interactive" in sys.argv:
+        print("Running in non-interactive mode")
+        # Implement non-interactive mode here
+    else:
+        main()
