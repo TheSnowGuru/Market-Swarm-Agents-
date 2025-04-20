@@ -286,6 +286,7 @@ class SwarmCLI:
         choices = [
             "Manage Agents",
             "Analyze Trades",
+            "Restart",
             "Exit"
         ]
 
@@ -301,6 +302,10 @@ class SwarmCLI:
             self.manage_agents_menu() # Call the bound method
         elif choice == "Analyze Trades":
             self.trade_analysis_menu() # Call the bound method
+        elif choice == "Restart":
+            self.console.print("[green]Restarting main menu...[/green]")
+            # Returning will cause the loop in 'run' to continue, effectively restarting
+            return
         elif choice == "Exit":
             self.console.print("[yellow]Exiting SWARM Trading System...[/yellow]")
             sys.exit(0)
