@@ -9,23 +9,22 @@
     
 
 - [ ] **2. Synthetic Data Creation**  
-  - [x] Load historical data for the asset/timeframe  
-  - [ ] Calculate and save new df for chosen indicators of the agent to create a the data set  .
-  - [ ] Generate synthetic trades data df (Buy/Sell, loop at each bar buy/sell order,with SL/TP, results, indicator values at entry and exit)  
-  - [ ] Use `numba` with `vectorbt` for fast processing  
-  - [ ] save the entry price, signal type,  
-  - [ ] Apply SL/TP with configurable RR  
-  - [ ] Track trade exit and save winning trades in CSV  
-  - [ ] Set default trade value of 100,000 account with 10,000 per each trade for the simulation. can be changed.
+  - [x] Load historical data for the asset/timeframe use vectorbt 
+  - [ ] Calculate and save new df for chosen indicators of the agent to create a the data set using vectorbt  .
+  - [ ] Generate synthetic trades data df (Buy/Sell entry and exit, loop at each bar buy/sell order,with SL/TP, result of the trade,and indicator values at entry and exit points)  
+  - [ ] Use `numba` with `vectorbt` for fast processing   
+  - [ ] Apply SL/TP with configurable RR thrshold, eg RR=2, profit is 0.20% , stop 0.10% 
+  - [ ] Track trade exit and save winning trades in CSV 
+  - [ ] Set default trade value of 100,000 account with 10,000 per each trade for the simulation. can be changed as menu item prompt the user.
   - [ ] Record indicator values at trade entry/exit  
-  - [ ] Compute trade metrics (PnL %, duration, volatility context, feature set)
+  - [ ] Compute trade metrics (PnL %, duration, drawdown, use vercorbt trade metrics feature to group by)
 
-- [ ] **3. Analze and Filter Profitable Trades**  
-  - [ ] Load synthetic trade data  
+- [ ] **3. Analze and Filter Profitable Trades as menu workflow**  
+  - [ ] Load synthetic trade data 
   - [ ] Filter trades by RR threshold set in CLI  
-  - [ ] Save only profitable trades in new df with the filtered thrshold per agent per strategy. 
-  - [ ] Be able to add remove df for agent
-  - [ ] Group df by PnL %, duration, drawdwon,  
+  - [ ] Save only profitable trades in new df with the filtered thrshold of the agent strategy. 
+  - [ ] Be able to add/replce or remove trade df for the agent strategy, be able to have for trades df of (asset) 
+  - [ ] Group df by PnL %, duration, drawdown,RR, Win Rate  
 
 - [ ] **4. Generating Optimal Trading Rules**  
   - [ ] Analyze filtered trades with plot using vectorbt 
