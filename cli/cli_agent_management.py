@@ -428,6 +428,7 @@ def manage_agents_menu(self):
     elif choice is None: # Handle Ctrl+C/EOF
          raise KeyboardInterrupt
 
+# --- Agent Creation Workflow ---
 
 def create_agent_workflow(self):
     # Reset any previous feature selections and current selections
