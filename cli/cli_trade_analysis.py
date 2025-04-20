@@ -30,12 +30,12 @@ from utils.trade_analyzer import TradeAnalyzer
 
 # Relying on 'self' passed from SwarmCLI instance in interactive_cli.py
 
-def trade_analysis_menu(self):
+def analyze_trades_menu(self):
     """
-    Menu for trade analysis
+    Menu for trade analysis and rule generation.
     """
     choices = [
-        "Generate Trades for Existing Agent", # Calls a method from cli_trade_generation via self
+        # "Generate Trades for Existing Agent", # REMOVED
         "View Existing Trades",             # Calls a method from cli_trade_generation via self
         "Filter Profitable Trades",
         "Identify Trade Patterns",
@@ -48,18 +48,17 @@ def trade_analysis_menu(self):
     self._display_selections_panel() # Assumes this method exists on self
 
     choice = questionary.select(
-        "Trade Analysis Menu:",
+        "Analyze Trades & Generate Rules:", # UPDATED prompt title
         choices=choices
     ).ask()
 
     if choice is None: # Handle Ctrl+C/EOF
         raise KeyboardInterrupt
 
-    if choice == "Generate Trades for Existing Agent":
+    # REMOVED 'Generate Trades for Existing Agent' block
+    if choice == "View Existing Trades":
         # This method is bound from cli_trade_generation in SwarmCLI.__init__
-        self.generate_trades_for_agent_workflow()
-    elif choice == "View Existing Trades":
-        # This method is bound from cli_trade_generation in SwarmCLI.__init__
+        # It should return here after completion
         self.view_synthetic_trades()
     elif choice == "Filter Profitable Trades":
         self.filter_trades_workflow()
@@ -83,7 +82,7 @@ def filter_trades_workflow(self):
 
     if not trade_files:
         self.console.print("[yellow]No synthetic trade files found in 'data/synthetic_trades'. Generate trades first.[/yellow]")
-        return self.trade_analysis_menu() # Go back to analysis menu
+        return self.analyze_trades_menu() # Go back to analysis menu
 
     # Add back option
     trade_files.append('Back')
@@ -94,7 +93,7 @@ def filter_trades_workflow(self):
     ).ask()
 
     if selected_file == 'Back':
-        return self.trade_analysis_menu()
+        return self.analyze_trades_menu()
     elif selected_file is None: # Handle Ctrl+C/EOF
         raise KeyboardInterrupt
 
@@ -149,7 +148,7 @@ def filter_trades_workflow(self):
             # Clear analyzer from self if it exists
             if hasattr(self, 'trade_analyzer'):
                  self.trade_analyzer = None
-            return self.trade_analysis_menu()
+            return self.analyze_trades_menu()
 
         self.console.print(f"[green]Found {len(filtered_trades)} trades matching criteria.[/green]")
 
@@ -184,11 +183,11 @@ def filter_trades_workflow(self):
             return self.identify_patterns_workflow(analyzer) # Pass analyzer explicitly
 
         # Return to menu
-        return self.trade_analysis_menu()
+        return self.analyze_trades_menu()
 
     except FileNotFoundError:
          self.console.print(f"[red]Error: Trade file not found at {file_path}[/red]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
     except KeyError as e:
          self.console.print(f"[red]Error filtering trades: Missing expected column - {e}. Check trade file format.[/red]")
          # Provide more context if possible
@@ -198,12 +197,12 @@ def filter_trades_workflow(self):
               self.console.print("[yellow]Note: Duration filtering requires a 'duration' column (in bars) in the trade file.[/yellow]")
          if 'pnl_pct' in str(e).lower():
               self.console.print("[yellow]Note: Profit filtering requires a 'pnl_pct' column in the trade file.[/yellow]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
     except Exception as e:
         self.console.print(f"[red]Error filtering trades: {e}[/red]")
         import traceback
         self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-        return self.trade_analysis_menu()
+        return self.analyze_trades_menu()
 
 def identify_patterns_workflow(self, analyzer=None):
     """
@@ -220,7 +219,7 @@ def identify_patterns_workflow(self, analyzer=None):
             # Verify that trades are loaded in the stored analyzer
             if analyzer.trades is None or analyzer.trades.empty:
                  self.console.print("[yellow]Stored trade analyzer has no trades loaded. Please load or filter trades first.[/yellow]")
-                 return self.trade_analysis_menu()
+                 return self.analyze_trades_menu()
             # Ask if user wants to use the trades already in the analyzer (likely filtered)
             use_existing = questionary.confirm(f"Use the {len(analyzer.trades)} trades currently loaded in the analyzer (from file: {os.path.basename(analyzer.trades_path or 'Unknown')})?").ask()
             if use_existing is None: raise KeyboardInterrupt
@@ -238,10 +237,10 @@ def identify_patterns_workflow(self, analyzer=None):
         trade_files = self._find_csv_files('data/synthetic_trades') # Call via self
         if not trade_files:
             self.console.print("[yellow]No synthetic trade files found in 'data/synthetic_trades'.[/yellow]")
-            return self.trade_analysis_menu()
+            return self.analyze_trades_menu()
         trade_files.append('Back')
         selected_file = questionary.select("Select trade file:", choices=trade_files).ask()
-        if selected_file == 'Back' or selected_file is None: return self.trade_analysis_menu()
+        if selected_file == 'Back' or selected_file is None: return self.analyze_trades_menu()
 
         file_path = os.path.join('data/synthetic_trades', selected_file)
         self._update_selection("Analysis File", selected_file)
@@ -250,19 +249,19 @@ def identify_patterns_workflow(self, analyzer=None):
             analyzer.load_trades(file_path)
             if analyzer.trades is None or analyzer.trades.empty:
                  self.console.print("[red]Selected trade file is empty or could not be loaded.[/red]")
-                 return self.trade_analysis_menu()
+                 return self.analyze_trades_menu()
             self.console.print(f"Loaded {len(analyzer.trades)} trades from {selected_file}")
             # Store this new analyzer instance
             self.trade_analyzer = analyzer
         except Exception as e:
             self.console.print(f"[red]Error loading trade file: {e}[/red]")
-            return self.trade_analysis_menu()
+            return self.analyze_trades_menu()
 
 
     # Ensure trades are loaded before proceeding
     if analyzer.trades is None or analyzer.trades.empty:
          self.console.print("[red]No trades available for pattern identification.[/red]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
 
     # 2. Configure clustering parameters
     # Select features for clustering (use features present in the loaded trades)
@@ -270,7 +269,7 @@ def identify_patterns_workflow(self, analyzer=None):
     if not available_features:
          self.console.print("[red]No numeric features found in the loaded trades for clustering.[/red]")
          self.console.print("[yellow]Ensure trade files include indicator values at entry/exit (e.g., 'entry_rsi', 'exit_macd').[/yellow]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
 
     # Suggest features based on common indicators and PnL/duration
     default_selection = [
@@ -285,7 +284,7 @@ def identify_patterns_workflow(self, analyzer=None):
     ).ask()
     if not selected_features:
          self.console.print("[yellow]No features selected for clustering. Aborting.[/yellow]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
     self._update_selection("Clustering Features", selected_features)
 
 
@@ -307,7 +306,7 @@ def identify_patterns_workflow(self, analyzer=None):
 
         if not patterns:
              self.console.print("[yellow]Could not identify distinct patterns with the selected features/clusters.[/yellow]")
-             return self.trade_analysis_menu()
+             return self.analyze_trades_menu()
 
         # Calculate feature importance based on the clustering features
         # Use the actual features passed to clustering
@@ -349,17 +348,17 @@ def identify_patterns_workflow(self, analyzer=None):
             return self.generate_rules_workflow(analyzer) # Pass analyzer
 
         # Return to menu
-        return self.trade_analysis_menu()
+        return self.analyze_trades_menu()
 
     except ValueError as ve:
          self.console.print(f"[red]Clustering Error: {ve}[/red]")
          self.console.print("[yellow]This might happen if the number of trades is less than the number of clusters, or if data has issues (e.g., NaN values).[/yellow]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
     except Exception as e:
         self.console.print(f"[red]Error identifying patterns: {e}[/red]")
         import traceback
         self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-        return self.trade_analysis_menu()
+        return self.analyze_trades_menu()
 
 def generate_rules_workflow(self, analyzer=None):
     """
@@ -376,15 +375,15 @@ def generate_rules_workflow(self, analyzer=None):
             # Verify that patterns have been identified in the stored analyzer
             if analyzer.trade_patterns is None:
                 self.console.print("[yellow]No patterns identified in the stored analyzer. Please identify patterns first.[/yellow]")
-                return self.trade_analysis_menu()
+                return self.analyze_trades_menu()
         else:
             self.console.print("[yellow]No patterns identified. Please identify patterns first.[/yellow]")
-            return self.trade_analysis_menu()
+            return self.analyze_trades_menu()
 
     # Ensure patterns exist
     if analyzer.trade_patterns is None:
          self.console.print("[red]Error: Trade patterns not found in the analyzer.[/red]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
 
 
     # Configure rule generation parameters
@@ -405,7 +404,7 @@ def generate_rules_workflow(self, analyzer=None):
     ).ask()
     if not selected_patterns:
          self.console.print("[yellow]No patterns selected. Aborting rule generation.[/yellow]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
     self._update_selection("Rule Patterns", selected_patterns)
 
 
@@ -421,7 +420,7 @@ def generate_rules_workflow(self, analyzer=None):
 
         if not rules:
             self.console.print("[yellow]No significant trading rules could be generated for the selected patterns/threshold.[/yellow]")
-            return self.trade_analysis_menu()
+            return self.analyze_trades_menu()
 
         # Display rules
         self.console.print("[bold]Generated Trading Rules:[/bold]")
@@ -509,17 +508,17 @@ def generate_rules_workflow(self, analyzer=None):
             return self.visualize_analysis_workflow(analyzer) # Pass analyzer
 
         # Return to menu
-        return self.trade_analysis_menu()
+        return self.analyze_trades_menu()
 
     except AttributeError as ae:
          # Handle cases where expected attributes (like trade_patterns) might be missing
          self.console.print(f"[red]Error generating rules: Missing data - {ae}. Ensure patterns were identified first.[/red]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
     except Exception as e:
         self.console.print(f"[red]Error generating rules: {e}[/red]")
         import traceback
         self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-        return self.trade_analysis_menu()
+        return self.analyze_trades_menu()
 
 def visualize_analysis_workflow(self, analyzer=None):
     """
@@ -536,22 +535,22 @@ def visualize_analysis_workflow(self, analyzer=None):
             # Check if analysis has been performed (e.g., patterns identified)
             if analyzer.trade_patterns is None and analyzer.feature_importance is None:
                 self.console.print("[yellow]No analysis results (patterns/importance) found in the stored analyzer. Perform analysis first.[/yellow]")
-                return self.trade_analysis_menu()
+                return self.analyze_trades_menu()
         else:
             self.console.print("[yellow]No analysis results available. Perform analysis (filtering, patterns) first.[/yellow]")
-            return self.trade_analysis_menu()
+            return self.analyze_trades_menu()
 
     # Ensure analyzer has something to visualize
     if analyzer.trades is None or analyzer.trades.empty:
          self.console.print("[red]No trades loaded in the analyzer to visualize.[/red]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
     # Check if there's anything *to* visualize (patterns or importance)
     has_patterns = analyzer.trade_patterns is not None and bool(analyzer.trade_patterns)
     has_importance = analyzer.feature_importance is not None and bool(analyzer.feature_importance)
 
     if not has_patterns and not has_importance:
          self.console.print("[yellow]No patterns or feature importance calculated to visualize.[/yellow]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
 
 
     # Generate visualizations
@@ -564,7 +563,7 @@ def visualize_analysis_workflow(self, analyzer=None):
 
         if not output_dir:
              self.console.print("[yellow]Visualizations could not be generated. Check logs or ensure plotting libraries are installed.[/yellow]")
-             return self.trade_analysis_menu()
+             return self.analyze_trades_menu()
 
         self.console.print(f"[green]Visualizations saved to folder: {output_dir}[/green]")
         self._update_selection("Viz Folder", output_dir)
@@ -588,18 +587,18 @@ def visualize_analysis_workflow(self, analyzer=None):
 
 
         # Return to menu
-        return self.trade_analysis_menu()
+        return self.analyze_trades_menu()
 
     except FileNotFoundError as fnf:
          self.console.print(f"[red]Error generating visualizations: {fnf}[/red]")
          self.console.print("[yellow]Ensure necessary directories exist or can be created.[/yellow]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
     except ImportError as ie:
          self.console.print(f"[red]Error generating visualizations: Missing library - {ie}[/red]")
          self.console.print("[yellow]Please ensure plotting libraries like matplotlib, seaborn, or plotly are installed (`pip install matplotlib seaborn plotly`).[/yellow]")
-         return self.trade_analysis_menu()
+         return self.analyze_trades_menu()
     except Exception as e:
         self.console.print(f"[red]Error generating visualizations: {e}[/red]")
         import traceback
         self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-        return self.trade_analysis_menu()
+        return self.analyze_trades_menu()
