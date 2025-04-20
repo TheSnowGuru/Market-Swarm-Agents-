@@ -2,6 +2,22 @@ import pandas as pd
 import numpy as np
 import vectorbt as vbt
 
+# Configure vectorbt settings globally for this module
+try:
+    # Attempt to enable caching and parallel processing
+    # These settings might be frozen if vectorbt was imported/used elsewhere first
+    if not vbt.settings.caching['active']:
+        vbt.settings.caching['enable'] = True
+    if not vbt.settings.numba['active']:
+        vbt.settings.numba['parallel'] = True
+    # Optional: Configure plotting backend if needed globally
+    # vbt.settings.plotting['backend'] = 'plotly'
+    # print("[dim]Vectorbt settings configured (Caching: True, Numba Parallel: True)[/dim]") # Optional: uncomment for debug
+except Exception as e:
+    # Use print directly as logger might not be configured yet
+    print(f"[yellow]Warning: Could not configure vectorbt settings: {e}[/yellow]")
+
+
 def calculate_percentage_changes(data: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate various percentage changes for price data
@@ -126,17 +142,18 @@ def calculate_all_features(data: pd.DataFrame) -> pd.DataFrame:
     try:
         # Calculate percentage changes
         df = calculate_percentage_changes(data)
-        
-        # Enable numba caching for faster calculations
-        vbt.settings.caching['enable'] = True
-        vbt.settings.numba['parallel'] = True
-        
+
+        # --- SETTINGS MOVED TO TOP LEVEL ---
+
         # Calculate vectorbt indicators
         df = calculate_vectorbt_indicators(df)
-        
+
         # Fill NaN values that might be created during calculations
-        df.fillna(0, inplace=True)
-        
+        # Consider a more robust fill method if 0 is inappropriate (e.g., ffill, bfill)
+        df.fillna(method='ffill', inplace=True) # Forward fill first
+        df.fillna(0, inplace=True) # Fill remaining NaNs (e.g., at the beginning)
+
+
         return df
     except Exception as e:
         print(f"Error in calculate_all_features: {e}")
