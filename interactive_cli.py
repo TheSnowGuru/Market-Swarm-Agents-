@@ -119,6 +119,9 @@ from utils.trade_analyzer import TradeAnalyzer
 #     list_agents
 # )
 
+# Import the moved trade generation/viewing functions
+from cli import cli_trade_generation
+
 class SwarmCLI:
     def __init__(self):
         self.console = Console()
@@ -498,9 +501,11 @@ class SwarmCLI:
         
         self.backtesting_menu()
 
-    def generate_synthetic_trades_for_agent(self, agent_name, features, market_data_path=None):
+    # --- Trade Generation/Viewing Methods Moved to cli/cli_trade_generation.py ---
+
+    def trade_analysis_menu(self):
         """
-        Generate synthetic trades specifically for an agent
+        Menu for trade analysis
         
         Args:
             agent_name (str): Name of the agent
@@ -1023,8 +1028,7 @@ class SwarmCLI:
         config[param] = new_value
         self.console.print(f"[green]Updated {param} to {new_value}[/green]")
         
-        # Continue configuration
-        return self.configure_trade_generation()
+    # --- Trade Generation/Viewing Methods Moved to cli/cli_trade_generation.py ---
         
     def trade_analysis_menu(self):
         """
@@ -1506,6 +1510,17 @@ def main():
             print(f"Recovery failed: {str(inner_e)}")
             print("Please try running this script in a standard command prompt window.")
             sys.exit(1)
+
+# Assign the imported functions as methods to the SwarmCLI class
+# This allows calling them using self.method_name(...) within SwarmCLI
+SwarmCLI.generate_synthetic_trades_for_agent = cli_trade_generation.generate_synthetic_trades_for_agent
+SwarmCLI.generate_synthetic_trades_workflow = cli_trade_generation.generate_synthetic_trades_workflow
+SwarmCLI.generate_trades_for_agent_workflow = cli_trade_generation.generate_trades_for_agent_workflow
+SwarmCLI._configure_trade_conditions = cli_trade_generation._configure_trade_conditions
+SwarmCLI._display_trade_statistics = cli_trade_generation._display_trade_statistics
+SwarmCLI.view_synthetic_trades = cli_trade_generation.view_synthetic_trades
+SwarmCLI.configure_trade_generation = cli_trade_generation.configure_trade_generation
+
 
 if __name__ == "__main__":
     main()
