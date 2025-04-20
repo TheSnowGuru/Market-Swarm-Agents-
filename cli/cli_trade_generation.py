@@ -360,184 +360,241 @@ def generate_synthetic_trades_for_agent(self, agent_name, features, market_data_
         self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
         return None, None # Return None for both path and config on error
 
-def generate_synthetic_trades_workflow(self):
-    """
-    Workflow for generating synthetic trades (standalone, not tied to an agent)
 
-    Args:
-        self (SwarmCLI): The instance of the SwarmCLI class
+# --- RENAME and MODIFY generate_synthetic_trades_workflow ---
+# Ensure this function is named generate_trade_data_workflow
+def generate_trade_data_workflow(self):
+    """
+    Workflow for generating the base trade dataset by simulating long/short
+    entries at every bar with SL/TP, recording selected features.
     """
     # 1. Select market data
     market_data_path = self._select_market_data() # Call via self
-
     if market_data_path == 'back' or market_data_path == 'cancel' or market_data_path is None:
-        # Return to the previous menu (trade_analysis_menu)
-        return self.trade_analysis_menu() # Go back to analysis menu
+        return self.main_menu() # Go back to main menu
 
-    # 2. Configure risk/reward parameters
-    rr_ratio = questionary.text(
-        "Enter risk/reward ratio (e.g., 2.0 means TP is 2x SL):",
-        validate=lambda x: self._validate_float(x, 0.1, 10), # Call via self
-        default="2.0"
+    # --- Load Data and Ensure DatetimeIndex ---
+    try:
+        df = pd.read_csv(market_data_path)
+        # Ensure datetime index (add robust parsing)
+        if 'date' in df.columns:
+             try:
+                 df['date'] = pd.to_datetime(df['date'])
+                 df = df.set_index('date')
+                 self.console.print(f"Using 'date' column as index.")
+             except Exception: pass # Ignore if parsing fails, try index
+        if not isinstance(df.index, pd.DatetimeIndex):
+             try:
+                 df.index = pd.to_datetime(df.index)
+                 self.console.print(f"Using existing index as datetime.")
+             except Exception as e:
+                  self.console.print(f"[red]Error parsing index as datetime: {e}. Please ensure index or 'date' column is datetime-like.[/red]")
+                  return self.main_menu()
+        # Optional: Check if data seems to be 1-minute (or other base frequency)
+        # inferred_freq = pd.infer_freq(df.index)
+        # self.console.print(f"Detected base frequency: {inferred_freq}")
+
+    except FileNotFoundError:
+         self.console.print(f"[red]Error: Market data file not found at {market_data_path}[/red]")
+         return self.main_menu()
+    except Exception as e:
+         self.console.print(f"[red]Error loading market data: {e}[/red]")
+         return self.main_menu()
+
+    # --- ADD TIMEFRAME SELECTION ---
+    self.console.print("\n[bold cyan]Select Target Timeframe:[/bold cyan]")
+    # Define common timeframes (Pandas offset aliases)
+    timeframe_choices = {
+        "1 Minute": "1min", # Add 1 min explicitly
+        "5 Minutes": "5min",
+        "15 Minutes": "15min",
+        "30 Minutes": "30min",
+        "1 Hour": "1H",
+        "4 Hours": "4H",
+        "1 Day": "1D",
+        "Keep Original (No Resampling)": None # Option to skip
+    }
+    selected_tf_display = questionary.select(
+        "Resample data to which timeframe?",
+        choices=list(timeframe_choices.keys())
     ).ask()
-    if rr_ratio is None: return self.trade_analysis_menu() # Handle Ctrl+C/EOF -> back to menu
+
+    if selected_tf_display is None: return self.main_menu() # Handle cancel
+
+    target_timeframe = timeframe_choices[selected_tf_display]
+    self._update_selection("Target Timeframe", selected_tf_display)
+    # --- END TIMEFRAME SELECTION ---
+
+    # --- ADD RESAMPLING LOGIC ---
+    df_processed = df # Start with original df
+    if target_timeframe:
+        self.console.print(f"Resampling data to {target_timeframe}...")
+        try:
+            # Define aggregation rules for OHLCV
+            ohlc_dict = {
+                'Open': 'first',
+                'High': 'max',
+                'Low': 'min',
+                'Close': 'last',
+                'Volume': 'sum'
+            }
+            # Check if required columns exist before resampling
+            cols_to_agg = {k: v for k, v in ohlc_dict.items() if k in df.columns}
+            if not all(k in cols_to_agg for k in ['Open', 'High', 'Low', 'Close']):
+                 self.console.print("[red]Error: Cannot resample - Missing required OHLC columns.[/red]")
+                 return self.main_menu()
+
+            df_resampled = df.resample(target_timeframe).agg(cols_to_agg)
+            # Drop rows where all values are NaN (often happens at start/end of resample)
+            df_resampled.dropna(how='all', inplace=True)
+            if df_resampled.empty:
+                 self.console.print(f"[red]Error: Resampling to {target_timeframe} resulted in empty DataFrame.[/red]")
+                 return self.main_menu()
+
+            df_processed = df_resampled # Use the resampled data for further steps
+            self.console.print(f"Resampling complete. New shape: {df_processed.shape}")
+
+        except Exception as resample_err:
+            self.console.print(f"[red]Error during resampling: {resample_err}[/red]")
+            return self.main_menu()
+    else:
+        self.console.print("Skipping resampling, using original timeframe.")
+    # --- END RESAMPLING LOGIC ---
+
+
+    # 2. Configure Simulation Parameters (SL/TP, Size) - Comes AFTER timeframe selection
+    self.console.print("\n[bold cyan]Configure Trade Simulation Parameters:[/bold cyan]")
+    # ... (RR, SL, TP, account_size, trade_size prompts remain the same) ...
+    rr_ratio = questionary.text(
+        "Enter Risk/Reward ratio (e.g., 2.0 means TP is 2x SL):",
+        validate=lambda x: self._validate_float(x, 0.1, 10), default="2.0"
+    ).ask()
+    if rr_ratio is None: return self.main_menu()
 
     stop_loss = questionary.text(
-        "Enter stop loss percentage (e.g., 0.01 for 1%):",
-        validate=lambda x: self._validate_float(x, 0.001, 0.1), # Call via self
-        default="0.01"
+        "Enter Stop Loss percentage (e.g., 0.01 for 1%):",
+        validate=lambda x: self._validate_float(x, 0.001, 0.1), default="0.01"
     ).ask()
-    if stop_loss is None: return self.trade_analysis_menu() # Handle Ctrl+C/EOF -> back to menu
+    if stop_loss is None: return self.main_menu()
 
-    # Calculate take profit based on RR ratio
     take_profit = float(stop_loss) * float(rr_ratio)
+    self.console.print(f"  Calculated Take Profit: {take_profit*100:.2f}%")
 
-    # 3. Configure account and trade size
     account_size = questionary.text(
-        "Enter account size in dollars:",
-        validate=lambda x: self._validate_float(x, 100, 10000000), # Call via self
-        default="10000"
+        "Enter Account Size (for simulation stats):",
+        validate=lambda x: self._validate_float(x, 100, 10000000), default="100000"
     ).ask()
-    if account_size is None: return self.trade_analysis_menu() # Handle Ctrl+C/EOF -> back to menu
+    if account_size is None: return self.main_menu()
 
     trade_size = questionary.text(
-        "Enter trade size in dollars (can be larger than account for leverage):",
-        validate=lambda x: self._validate_float(x, 100, 10000000), # Call via self
-        default="100000"
+        "Enter Trade Size (amount per trade, e.g., 10000):",
+        validate=lambda x: self._validate_float(x, 100, 10000000), default="10000"
     ).ask()
-    if trade_size is None: return self.trade_analysis_menu() # Handle Ctrl+C/EOF -> back to menu
+    if trade_size is None: return self.main_menu()
 
 
-    # 4. Configure entry/exit conditions
-    self.console.print("[yellow]Configuring entry conditions...[/yellow]")
-    entry_conditions = self._configure_trade_conditions("entry") # Call via self
-    if entry_conditions is None: return self.trade_analysis_menu() # Handle back/cancel
+    # 3. Select Features to Record
+    # ... (feature selection prompt remains the same) ...
+    available_features = get_available_features()
+    if not available_features:
+         self.console.print("[red]Error: No features available from feature extractor.[/red]")
+         return self.main_menu()
 
-    self.console.print("[yellow]Configuring exit conditions...[/yellow]")
-    exit_conditions = self._configure_trade_conditions("exit") # Call via self
-    if exit_conditions is None: return self.trade_analysis_menu() # Handle back/cancel
+    features_to_record = questionary.checkbox(
+         "Select features/indicators to record alongside trades for later analysis:",
+         choices=available_features,
+         default=[f for f in ['rsi', 'macd_hist', 'sma_20', 'ema_20'] if f in available_features] # Suggest common ones
+    ).ask()
+    if not features_to_record:
+         self.console.print("[yellow]No features selected for recording. Aborting.[/yellow]")
+         return self.main_menu()
+    self.console.print(f"[cyan]Will record these features at trade entry:[/cyan] {', '.join(features_to_record)}")
 
-    # 5. Configure additional parameters
+
+    # 4. Configure Saving Options
+    # ... (saving options prompts remain the same) ...
     save_winning_only = questionary.confirm(
-        "Save only winning trades?", default=False
+        "Save only winning trades to the final CSV?", default=False
     ).ask()
-    if save_winning_only is None: return self.trade_analysis_menu() # Handle Ctrl+C/EOF -> back to menu
+    if save_winning_only is None: return self.main_menu()
 
     min_profit = "0.0"
     if save_winning_only:
         min_profit = questionary.text(
-            "Minimum profit percentage to consider a winning trade:",
-            validate=lambda x: self._validate_float(x, 0, 100), # Call via self
-            default="0.0"
+            "Minimum profit percentage threshold for winning trades:",
+            validate=lambda x: self._validate_float(x, 0, 100), default="0.0"
         ).ask()
-        if min_profit is None: return self.trade_analysis_menu() # Handle Ctrl+C/EOF -> back to menu
+        if min_profit is None: return self.main_menu()
 
-    # 6. Generate trades
-    self.console.print("[bold green]Generating synthetic trades...[/bold green]")
+
+    # 5. Generate Trades (using df_processed)
+    self.console.print("\n[bold green]Generating potential trades dataset...[/bold green]")
+    # Use selected_tf_display which is more user-friendly
+    self.console.print(f"[italic]Using {selected_tf_display} timeframe data.[/italic]") # Mention timeframe
 
     try:
-        # Load market data
-        df = pd.read_csv(market_data_path)
-        # Ensure datetime index
-        if 'date' in df.columns:
-             df['date'] = pd.to_datetime(df['date'])
-             df = df.set_index('date')
-        elif df.index.dtype != 'datetime64[ns]':
-             # Try converting index, handle potential errors
-             try:
-                 df.index = pd.to_datetime(df.index)
-             except (ValueError, TypeError) as e:
-                 self.console.print(f"[red]Error converting index to datetime: {e}. Ensure index is datetime-like.[/red]")
-                 return self.trade_analysis_menu()
-
-
-        # Calculate ALL features needed for conditions and analysis
-        # Ensure required base columns are present before calculating features
-        required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-        if not all(col in df.columns for col in required_cols):
-             # Attempt to rename common lowercase versions
-             rename_map = {col.lower(): col for col in required_cols if col.lower() in df.columns and col not in df.columns}
-             if rename_map:
-                  df.rename(columns=rename_map, inplace=True)
-                  self.console.print(f"[yellow]Renamed columns: {list(rename_map.keys())}[/yellow]")
-
-             # Check again
-             if not all(col in df.columns for col in required_cols):
-                  missing = [col for col in required_cols if col not in df.columns]
-                  self.console.print(f"[red]Error: Missing required columns in data: {missing}[/red]")
-                  return self.trade_analysis_menu()
-
-        self.console.print("[yellow]Calculating all features for trade generation...[/yellow]")
-        # Wrap feature calculation in try-except
-        try:
-            df = calculate_all_features(df) # Use imported function
-        except Exception as feat_err:
-            self.console.print(f"[red]Error calculating features: {feat_err}[/red]")
-            import traceback
-            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            return self.trade_analysis_menu()
-        self.console.print("[green]Features calculated.[/green]")
-
-
-        # Configure trade generator
+        # Configure and run generator
         gen_config = {
-            'risk_reward_ratio': float(rr_ratio),
             'stop_loss_pct': float(stop_loss),
             'take_profit_pct': take_profit,
-            'save_winning_only': save_winning_only,
-            'min_profit_threshold': float(min_profit),
             'account_size': float(account_size),
-            'trade_size': float(trade_size)
+            'trade_size': float(trade_size),
+            'save_winning_only': save_winning_only,
+            'min_profit_threshold': float(min_profit)
         }
+        generator = SyntheticTradeGenerator(gen_config)
 
-        generator = SyntheticTradeGenerator(gen_config) # Use imported class
+        # Generate trades using the potentially resampled data
+        trades_df = generator.generate_trades(df_processed, features_to_record=features_to_record) # Pass df_processed
 
-        # Generate trades
-        trades_df = generator.generate_trades(df, entry_conditions, exit_conditions)
-
-        if trades_df is None or len(trades_df) == 0:
-            self.console.print("[red]No trades were generated with the given parameters.[/red]")
-            return self.trade_analysis_menu()
+        if trades_df is None or trades_df.empty:
+            self.console.print("[red]No trades were generated or saved (check logs).[/red]")
+            return self.main_menu()
 
         # Display trade statistics
+        # ... (stats display remains the same) ...
         stats = generator.get_trade_statistics()
-        # Add config params to stats for display
-        stats.update({
-             'Account Size': gen_config['account_size'],
-             'Trade Size': gen_config['trade_size'],
-             'Risk Reward Ratio': gen_config['risk_reward_ratio'],
-             'Stop Loss Pct': gen_config['stop_loss_pct'] * 100, # Show as %
-             'Take Profit Pct': gen_config['take_profit_pct'] * 100 # Show as %
-        })
-        self._display_trade_statistics(stats) # Call via self
+        self.console.print("\n[bold]Simulation Statistics Summary:[/bold]")
+        if stats.get("Long Simulation Stats"):
+             self.console.print("[cyan]--- Long Trades ---[/cyan]")
+             self._display_trade_statistics(stats["Long Simulation Stats"])
+        if stats.get("Short Simulation Stats"):
+             self.console.print("[cyan]--- Short Trades ---[/cyan]")
+             self._display_trade_statistics(stats["Short Simulation Stats"])
+        overall_stats = {k:v for k,v in stats.items() if not isinstance(v, dict)}
+        if overall_stats:
+             self.console.print("[cyan]--- Overall ---[/cyan]")
+             self._display_trade_statistics(overall_stats)
 
-        # Save trades
-        save_trades = questionary.confirm("Save generated trades to CSV?", default=True).ask()
-        if save_trades is None: return self.trade_analysis_menu() # Handle Ctrl+C/EOF -> back to menu
 
-        if save_trades:
-            # Generate a generic filename
-            timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-            filename = f'standalone_trades_{timestamp}.csv'
-            output_path = generator.save_trades(filename=filename)
-            self.console.print(f"[green]Trades saved to: {output_path}[/green]")
+        # Save trades - UPDATE FILENAME
+        timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+        market_base = os.path.splitext(os.path.basename(market_data_path))[0]
+        # Add timeframe string to filename if resampling occurred
+        # Use target_timeframe which is the pandas string ('5min', '1H', etc.) or None
+        tf_str = f"_{target_timeframe}" if target_timeframe else "_origTF"
+        filename = f'trades_{market_base}{tf_str}_{timestamp}.csv' # Include timeframe
+        output_path = generator.save_trades(filename=filename)
 
-        # Return to menu
-        return self.trade_analysis_menu()
+        if output_path:
+            self.console.print(f"\n[bold green]Trade data generation complete![/bold green]")
+            # Use os.path.abspath to ensure the link works correctly
+            abs_path = os.path.abspath(output_path)
+            self.console.print(f"Saved to: [link=file://{abs_path}]{abs_path}[/link]")
+        else:
+            self.console.print("[yellow]Trade data generated but failed to save.[/yellow]")
 
-    except FileNotFoundError:
-         self.console.print(f"[red]Error: Market data file not found at {market_data_path}[/red]")
-         return self.trade_analysis_menu()
-    except KeyError as e:
-         self.console.print(f"[red]Error generating trades: Missing expected column - {e}. Ensure data and features are correct.[/red]")
-         import traceback
-         self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-         return self.trade_analysis_menu()
+        # Ask to return to main menu
+        questionary.text("Press Enter to return to the main menu...").ask()
+        return self.main_menu()
+
     except Exception as e:
-        self.console.print(f"[red]Error generating synthetic trades: {e}[/red]")
+        self.console.print(f"[red]Error during trade generation workflow: {e}[/red]")
         import traceback
         self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-        return self.trade_analysis_menu()
+        questionary.text("Press Enter to return to the main menu...").ask()
+        return self.main_menu()
+
 
 def generate_trades_for_agent_workflow(self):
     """
