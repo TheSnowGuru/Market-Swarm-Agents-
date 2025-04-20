@@ -3,6 +3,7 @@ import os
 import logging
 import pandas as pd
 import numpy as np
+import warnings # <-- ADD THIS IMPORT
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -261,7 +262,7 @@ class SwarmCLI:
         self._display_trade_statistics = _display_trade_statistics.__get__(self) # Called by agent creation & analysis
 
         # Trade Analysis
-        self.trade_analysis_menu = trade_analysis_menu.__get__(self)
+        self.analyze_trades_menu = analyze_trades_menu.__get__(self) # <-- CHANGE THIS LINE
         self.filter_trades_workflow = filter_trades_workflow.__get__(self)
         self.identify_patterns_workflow = identify_patterns_workflow.__get__(self)
         self.generate_rules_workflow = generate_rules_workflow.__get__(self)
