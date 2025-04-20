@@ -36,11 +36,12 @@ def calculate_percentage_changes(data: pd.DataFrame) -> pd.DataFrame:
     
     # Calculate percentage changes at different timeframes
     df['pct_change'] = df['Close'].pct_change() * 100
-    df['daily_pct_change'] = df['Close'].pct_change(periods=1) * 100
-    df['weekly_pct_change'] = df['Close'].pct_change(periods=7) * 100
-    df['4h_pct_change'] = df['Close'].pct_change(periods=4) * 100  # Assuming hourly data
-    df['1h_pct_change'] = df['Close'].pct_change(periods=1) * 100  # Assuming hourly data
-    
+    df['daily_pct_change'] = df['Close'].pct_change(periods=1) * 100 # Assumes daily or is just 1-period change
+    df['weekly_pct_change'] = df['Close'].pct_change(periods=7) * 100 # Assumes daily data for weekly change
+    # --- Add comments for frequency assumption ---
+    df['4h_pct_change'] = df['Close'].pct_change(periods=4) * 100  # WARNING: Assumes input data frequency allows 4-period lookback (e.g., 1H data for 4H change)
+    df['1h_pct_change'] = df['Close'].pct_change(periods=1) * 100  # WARNING: Assumes input data frequency allows 1-period lookback (e.g., 1H data for 1H change)
+
     return df
 
 def calculate_vectorbt_indicators(data: pd.DataFrame) -> pd.DataFrame:
@@ -80,7 +81,7 @@ def calculate_vectorbt_indicators(data: pd.DataFrame) -> pd.DataFrame:
     df['bb_upper'] = bb.upper.values
     df['bb_lower'] = bb.lower.values
     df['bb_percent_b'] = bb.percent_b.values
-    df['bb_percent_b'] = bb.percent_b.values
+    # df['bb_percent_b'] = bb.percent_b.values # Removed duplicate line
 
     # Calculate Moving Averages
     df['sma_20'] = vbt.MA.run(close, window=20, short_name='sma').ma.values
@@ -99,20 +100,20 @@ def calculate_vectorbt_indicators(data: pd.DataFrame) -> pd.DataFrame:
 
 def get_available_features() -> list:
     """
-    Get list of all available features for strategy analysis
-    
+    Get list of all available features calculated by the current implementation.
+
     Returns:
         list: List of available features
     """
     return [
-        # Percentage changes
+        # Percentage changes (Calculated in calculate_percentage_changes)
         'pct_change',
-        'daily_pct_change',
-        'weekly_pct_change',
-        '4h_pct_change',
-        '1h_pct_change',
-        
-        # Technical indicators
+        'daily_pct_change', # Assumes daily or is just 1-period change
+        'weekly_pct_change', # Assumes daily data for weekly change
+        '4h_pct_change',  # Note: Assumes hourly input data
+        '1h_pct_change',  # Note: Assumes hourly input data
+
+        # Technical indicators (Calculated in calculate_vectorbt_indicators)
         'rsi',
         'macd',
         'macd_signal',
@@ -123,13 +124,13 @@ def get_available_features() -> list:
         'bb_percent_b',
         'sma_20',
         'ema_20',
-        'atr',
-        'obv',
-        
-        # Additional indicators
-        'volume_trend',
-        'price_momentum',
-        'volatility_index'
+        'atr', # Conditional on High/Low columns
+        'obv', # Conditional on Volume column
+
+        # --- REMOVED UNIMPLEMENTED FEATURES ---
+        # 'volume_trend',
+        # 'price_momentum',
+        # 'volatility_index'
     ]
 
 def calculate_all_features(data: pd.DataFrame) -> pd.DataFrame:
