@@ -10,7 +10,7 @@
 
 - [ ] **2. Synthetic Data Creation**  
   - [x] Load historical data for the asset/timeframe use vectorbt 
-  - [ ] Calculate and save new df for chosen indicators of the agent to create a the data set using vectorbt  .
+  - [ ] Calculate and save new df for chosen indicators of the agent to create a the data set using vectorbt.
   - [ ] Generate synthetic trades data df (Buy/Sell entry and exit, loop at each bar buy/sell order,with SL/TP, result of the trade,and indicator values at entry and exit points)  
   - [ ] Use `numba` with `vectorbt` for fast processing   
   - [ ] Apply SL/TP with configurable RR thrshold, eg RR=2, profit is 0.20% , stop 0.10% 
