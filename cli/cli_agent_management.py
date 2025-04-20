@@ -24,7 +24,6 @@ from rich import print as rprint # For better dict printing
 # Import trade generation functions needed by agent workflows
 from .cli_trade_generation import generate_synthetic_trades_for_agent, _display_trade_statistics
 # Import trade analysis functions needed by agent workflows
-from .cli_trade_analysis import trade_analysis_menu, filter_trades_workflow # Assuming these might be called
 
 # It's generally better practice to pass necessary methods/objects explicitly
 # rather than relying on 'self' from a different file.
