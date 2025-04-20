@@ -340,23 +340,25 @@ def generate_synthetic_trades_for_agent(self, agent_name, features, market_data_
 
             output_path = generator.save_trades(filename=filename)
             self.console.print(f"[green]Trades saved to: {output_path}[/green]")
-            return output_path
+            # Return both path and the config used
+            return output_path, gen_config
 
-        return None # Return None if trades were not saved
+        # Return None for path, but still return the config used for generation attempt
+        return None, gen_config
 
     except FileNotFoundError:
          self.console.print(f"[red]Error: Market data file not found at {market_data_path}[/red]")
-         return None
+         return None, None # Return None for both path and config on error
     except KeyError as e:
          self.console.print(f"[red]Error generating trades: Missing expected column - {e}. Ensure data and features are correct.[/red]")
          import traceback
          self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-         return None
+         return None, None # Return None for both path and config on error
     except Exception as e:
         self.console.print(f"[red]Error generating synthetic trades: {e}[/red]")
         import traceback
         self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-        return None
+        return None, None # Return None for both path and config on error
 
 def generate_synthetic_trades_workflow(self):
     """

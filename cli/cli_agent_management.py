@@ -248,22 +248,31 @@ def create_agent_workflow(self):
         else:
             # Call the agent-specific trade generation workflow
             # This workflow now handles the generation of all trades + feature recording
-            # It will prompt for SL/TP/Size internally
-            output_path = self.generate_synthetic_trades_for_agent(
+            # It will prompt for SL/TP/Size internally and return path and config
+            output_path, gen_config_params = self.generate_synthetic_trades_for_agent(
                 agent_name=agent_name,
                 features=features, # Pass the selected features to be recorded
                 market_data_path=market_data_path
             )
             if not output_path:
-                 self.console.print("[red]Failed to generate base trade data.[/red]")
+                 self.console.print("[red]Failed to generate base trade data (or data not saved).[/red]")
                  # Decide how to proceed - maybe ask user? For now, continue agent creation without trades path.
-                 generate_trades = False
-                 self._update_selection("Generate Trades", "No")
+                 # Keep generate_trades=True if gen_config_params exists, as generation was attempted
+                 if gen_config_params is None:
+                      generate_trades = False # Mark as not generated if config is None (error occurred)
+                      self._update_selection("Generate Trades", "No")
+                 else:
+                      # Generation was attempted, config exists, but path is None (not saved)
+                      self._update_selection("Generated Trades", "Not Saved")
+
+            else: # Output path exists
+                 self._update_selection("Generated Trades", os.path.basename(output_path))
 
 
     else: # If not generating trades
          output_path = None # Ensure output_path is None
          market_data_path = None # Ensure market_data_path is None if not generated
+         gen_config_params = None # Ensure gen_config_params is None
 
     # --- Assemble Agent Configuration ---
     self.console.print(f"[yellow]Automatically training {agent_name}...[/yellow]")
@@ -288,9 +297,9 @@ def create_agent_workflow(self):
     # Add market data path if selected/used
     if 'market_data_path' in locals() and market_data_path:
          agent_config['market_data'] = market_data_path # Store the selected market data path
-    # Add trade generation params if they were set (might be useful for reproducibility)
-    if generate_trades and 'gen_config' in locals():
-         agent_config['trade_generation_params'] = gen_config # Store the trade gen config used
+    # Add trade generation params if they were returned (might be useful for reproducibility)
+    if gen_config_params: # Check if the returned config dictionary exists
+         agent_config['trade_generation_params'] = gen_config_params # Store the returned trade gen config
 
 
     # Display agent configuration summary
