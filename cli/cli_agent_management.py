@@ -377,10 +377,17 @@ def create_new_strategy_workflow(self, agent_name):
          return None
 
     # Use self._selected_features to store selection for the calling function (create_agent_workflow)
+
+    # --- Calculate default selection more robustly ---
+    desired_defaults = {'rsi', 'macd_hist', 'sma_20', 'ema_20'} # Use a set for faster lookup
+    # Iterate through available features and select those matching the desired defaults
+    default_selection = [feature for feature in available_features if feature in desired_defaults]
+    # --- End default calculation ---
+
     self._selected_features = questionary.checkbox(
          f"Select features to associate with agent '{agent_name}' (these will be recorded in generated trades):",
          choices=available_features,
-         default=[f for f in ['rsi', 'macd_hist', 'sma_20', 'ema_20'] if f in available_features] # Suggest common ones
+         default=default_selection # Use the robustly calculated default list
     ).ask()
     if not self._selected_features:
          self.console.print("[yellow]No features selected. Cannot create strategy base.[/yellow]")
