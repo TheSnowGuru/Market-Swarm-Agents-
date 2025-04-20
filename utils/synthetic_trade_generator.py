@@ -42,12 +42,12 @@ class SyntheticTradeGenerator:
         self.config = self.default_config
         
         # Initialize results storage
-        self.trades = []
-        self.winning_trades = []
-        self.losing_trades = []
-    
-    def generate_trades(self, 
-                        data: pd.DataFrame, 
+        self.trades = pd.DataFrame() # Initialize as empty DataFrame
+        self.portfolio = None # To store the vectorbt portfolio object
+        self.portfolio_stats = {} # To store portfolio stats
+
+    def generate_trades(self,
+                        data: pd.DataFrame,
                         entry_conditions: Dict[str, Any] = None,
                         exit_conditions: Dict[str, Any] = None) -> pd.DataFrame:
         """
@@ -93,14 +93,17 @@ class SyntheticTradeGenerator:
             trades_df = trades_df[trades_df['pnl_pct'] > self.config['min_profit_threshold']]
         
         # Store results
-        self.trades = trades_df
-        self.winning_trades = trades_df[trades_df['pnl_pct'] > 0]
-        self.losing_trades = trades_df[trades_df['pnl_pct'] <= 0]
-        
-        print(f"Generated {len(trades_df)} trades ({len(self.winning_trades)} winning, {len(self.losing_trades)} losing)")
-        
+        self.trades = trades_df # Store the formatted trades DataFrame
+        # self.portfolio and self.portfolio_stats are already stored in _simulate_trades
+
+        if not trades_df.empty:
+            winning_trades_count = (trades_df['win/loss'] == 'win').sum()
+            losing_trades_count = (trades_df['win/loss'] == 'loss').sum()
+            print(f"Generated {len(trades_df)} trades ({winning_trades_count} winning, {losing_trades_count} losing)")
+        else:
+            print("No trades were generated.")
+
         return trades_df
-    
     def _generate_signals(self, 
                           df: pd.DataFrame, 
                           entry_conditions: Dict[str, Any] = None,
@@ -129,50 +132,87 @@ class SyntheticTradeGenerator:
                 'macd_hist': {'below': 0}
             }
         
-        # Initialize signal series
-        entry_signals = pd.Series(False, index=df.index)
-        exit_signals = pd.Series(False, index=df.index)
-        
-        # Process entry conditions
+        # Initialize signal series with True (will be ANDed)
+        entry_signals = pd.Series(True, index=df.index)
+        exit_signals = pd.Series(True, index=df.index)
+
+        # Process entry conditions (use & for AND logic)
         for indicator, condition in entry_conditions.items():
             if indicator in df.columns:
+                current_entry_condition = pd.Series(False, index=df.index) # Condition for this indicator
                 for op, value in condition.items():
                     if op == 'above':
-                        entry_signals = entry_signals | (df[indicator] > value)
+                        current_entry_condition = current_entry_condition | (df[indicator] > value)
                     elif op == 'below':
-                        entry_signals = entry_signals | (df[indicator] < value)
+                        current_entry_condition = current_entry_condition | (df[indicator] < value)
                     elif op == 'cross_above':
-                        entry_signals = entry_signals | (
-                            (df[indicator].shift(1) < value) & 
+                        current_entry_condition = current_entry_condition | (
+                            (df[indicator].shift(1) < value) &
                             (df[indicator] >= value)
                         )
                     elif op == 'cross_below':
-                        entry_signals = entry_signals | (
-                            (df[indicator].shift(1) > value) & 
+                        current_entry_condition = current_entry_condition | (
+                            (df[indicator].shift(1) > value) &
                             (df[indicator] <= value)
                         )
-        
-        # Process exit conditions
+                    # Add column comparison logic if needed
+                    elif op == 'above_col' and value in df.columns:
+                         current_entry_condition = current_entry_condition | (df[indicator] > df[value])
+                    elif op == 'below_col' and value in df.columns:
+                         current_entry_condition = current_entry_condition | (df[indicator] < df[value])
+                    elif op == 'cross_above_col' and value in df.columns:
+                         current_entry_condition = current_entry_condition | (
+                             (df[indicator].shift(1) < df[value].shift(1)) &
+                             (df[indicator] >= df[value])
+                         )
+                    elif op == 'cross_below_col' and value in df.columns:
+                         current_entry_condition = current_entry_condition | (
+                             (df[indicator].shift(1) > df[value].shift(1)) &
+                             (df[indicator] <= df[value])
+                         )
+                entry_signals = entry_signals & current_entry_condition # AND with overall signal
+
+        # Process exit conditions (use & for AND logic)
         for indicator, condition in exit_conditions.items():
             if indicator in df.columns:
+                current_exit_condition = pd.Series(False, index=df.index) # Condition for this indicator
                 for op, value in condition.items():
                     if op == 'above':
-                        exit_signals = exit_signals | (df[indicator] > value)
+                        current_exit_condition = current_exit_condition | (df[indicator] > value)
                     elif op == 'below':
-                        exit_signals = exit_signals | (df[indicator] < value)
+                        current_exit_condition = current_exit_condition | (df[indicator] < value)
                     elif op == 'cross_above':
-                        exit_signals = exit_signals | (
-                            (df[indicator].shift(1) < value) & 
+                        current_exit_condition = current_exit_condition | (
+                            (df[indicator].shift(1) < value) &
                             (df[indicator] >= value)
                         )
                     elif op == 'cross_below':
-                        exit_signals = exit_signals | (
-                            (df[indicator].shift(1) > value) & 
+                        current_exit_condition = current_exit_condition | (
+                            (df[indicator].shift(1) > value) &
                             (df[indicator] <= value)
                         )
-        
+                    # Add column comparison logic if needed
+                    elif op == 'above_col' and value in df.columns:
+                         current_exit_condition = current_exit_condition | (df[indicator] > df[value])
+                    elif op == 'below_col' and value in df.columns:
+                         current_exit_condition = current_exit_condition | (df[indicator] < df[value])
+                    elif op == 'cross_above_col' and value in df.columns:
+                         current_exit_condition = current_exit_condition | (
+                             (df[indicator].shift(1) < df[value].shift(1)) &
+                             (df[indicator] >= df[value])
+                         )
+                    elif op == 'cross_below_col' and value in df.columns:
+                         current_exit_condition = current_exit_condition | (
+                             (df[indicator].shift(1) > df[value].shift(1)) &
+                             (df[indicator] <= df[value])
+                         )
+                exit_signals = exit_signals & current_exit_condition # AND with overall signal
+
+        # Ensure signals are boolean
+        entry_signals = entry_signals.astype(bool)
+        exit_signals = exit_signals.astype(bool)
+
         return entry_signals, exit_signals
-    
     def _calculate_atr(self, df: pd.DataFrame, window: int = 14) -> pd.Series:
         """
         Calculate Average True Range for dynamic SL/TP
@@ -218,51 +258,54 @@ class SyntheticTradeGenerator:
             exits=exit_signals,
             sl_stop=self.config['stop_loss_pct'],
             tp_stop=self.config['take_profit_pct'],
-            freq='1D',  # Adjust based on your data frequency
+            # freq='1D', # Let vectorbt infer frequency
             init_cash=self.config['account_size'],
-            size=self.config['trade_size'] / df['Close'].iloc[0]  # Convert dollar amount to units
+            size=self.config['trade_size'] / df['Close'].iloc[0] # Convert dollar amount to units
         )
-        
+
+        # Store portfolio and stats
+        self.portfolio = pf
+        try:
+            self.portfolio_stats = pf.stats().to_dict() if pf.stats() is not None else {}
+        except Exception as e:
+            print(f"Warning: Could not generate portfolio stats: {e}")
+            self.portfolio_stats = {}
+
+
         # Get trade details
         trades = pf.trades
-        
+
         if len(trades.records_arr) == 0:
             print("No trades generated with the given signals")
             return pd.DataFrame()
-        
+
         # Extract trade information
         trade_records = trades.records
-        
-        # Create a DataFrame with trade details
+
+        # Create a DataFrame with the requested columns
         trades_df = pd.DataFrame({
-            'entry_time': df.index[trade_records['entry_idx']],
-            'exit_time': df.index[trade_records['exit_idx']],
-            'entry_price': trade_records['entry_price'],
-            'exit_price': trade_records['exit_price'],
-            'direction': np.where(trade_records['direction'] == 0, 'short', 'long'),
-            'pnl': trade_records['pnl'],
-            'pnl_pct': trade_records['return'] * 100,
-            'size': trade_records['size'],
-            'value': trade_records['value'],
-            'duration': trade_records['exit_idx'] - trade_records['entry_idx'],
-            'exit_type': np.where(
-                trade_records['status'] == 1, 
-                'tp_hit' if trade_records['return'] > 0 else 'sl_hit', 
-                'signal'
-            )
+            'time': df.index[trade_records['entry_idx']], # Use entry time as the primary time
+            'signal buy/sell': np.where(trade_records['direction'] == 0, 'sell', 'buy'), # Map direction
+            'profit value': trade_records['pnl'],
+            'win/loss': np.where(trade_records['pnl'] > 0, 'win', 'loss'),
+            'duration': trade_records['exit_idx'] - trade_records['entry_idx'], # Duration in bars/periods
+            'status': trade_records['status'] # Raw status code from vectorbt
         })
-        
-        # Add indicator values at entry
-        for col in df.columns:
-            if col not in ['Open', 'High', 'Low', 'Close', 'Volume']:
-                trades_df[f'entry_{col}'] = df[col].iloc[trade_records['entry_idx']].values
-                trades_df[f'exit_{col}'] = df[col].iloc[trade_records['exit_idx']].values
-        
-        # Calculate additional metrics
-        trades_df['risk_reward_realized'] = trades_df['pnl_pct'] / self.config['stop_loss_pct']
-        
+
+        # Optional: Add exit time if needed for specific analysis, but it's not in the requested columns
+        # trades_df['exit_time'] = df.index[trade_records['exit_idx']]
+
+        # Optional: Add entry/exit prices if needed
+        # trades_df['entry_price'] = trade_records['entry_price']
+        # trades_df['exit_price'] = trade_records['exit_price']
+
+        # Optional: Add indicator values if needed (can make file large)
+        # for col in df.columns:
+        #     if col not in ['Open', 'High', 'Low', 'Close', 'Volume']:
+        #         trades_df[f'entry_{col}'] = df[col].iloc[trade_records['entry_idx']].values
+        #         # trades_df[f'exit_{col}'] = df[col].iloc[trade_records['exit_idx']].values
+
         return trades_df
-    
     def save_trades(self, 
                    output_dir: str = 'data/synthetic_trades', 
                    filename: str = None,
@@ -311,47 +354,21 @@ class SyntheticTradeGenerator:
         Calculate statistics for the generated trades
         
         Returns:
-            dict: Trade statistics
+            dict: Trade statistics from vectorbt portfolio
         """
-        if len(self.trades) == 0:
-            return {"error": "No trades generated"}
-        
-        # Calculate basic statistics
-        win_rate = len(self.winning_trades) / len(self.trades) if len(self.trades) > 0 else 0
-        avg_profit = self.winning_trades['pnl_pct'].mean() if len(self.winning_trades) > 0 else 0
-        avg_loss = self.losing_trades['pnl_pct'].mean() if len(self.losing_trades) > 0 else 0
-        profit_factor = abs(self.winning_trades['pnl'].sum() / self.losing_trades['pnl'].sum()) if len(self.losing_trades) > 0 and self.losing_trades['pnl'].sum() != 0 else float('inf')
-        
-        # Calculate advanced statistics
-        avg_trade = self.trades['pnl_pct'].mean()
-        std_dev = self.trades['pnl_pct'].std()
-        sharpe = avg_trade / std_dev if std_dev > 0 else 0
-        
-        # Calculate trade durations
-        avg_duration = self.trades['duration'].mean()
-        avg_win_duration = self.winning_trades['duration'].mean() if len(self.winning_trades) > 0 else 0
-        avg_loss_duration = self.losing_trades['duration'].mean() if len(self.losing_trades) > 0 else 0
-        
-        # Exit type statistics
-        tp_exits = (self.trades['exit_type'] == 'tp_hit').sum()
-        sl_exits = (self.trades['exit_type'] == 'sl_hit').sum()
-        signal_exits = (self.trades['exit_type'] == 'signal').sum()
-        
-        return {
-            "total_trades": len(self.trades),
-            "winning_trades": len(self.winning_trades),
-            "losing_trades": len(self.losing_trades),
-            "win_rate": win_rate,
-            "avg_profit_pct": avg_profit,
-            "avg_loss_pct": avg_loss,
-            "profit_factor": profit_factor,
-            "avg_trade_pct": avg_trade,
-            "std_dev_pct": std_dev,
-            "sharpe_ratio": sharpe,
-            "avg_duration": avg_duration,
-            "avg_win_duration": avg_win_duration,
-            "avg_loss_duration": avg_loss_duration,
-            "tp_exits": tp_exits,
-            "sl_exits": sl_exits,
-            "signal_exits": signal_exits
-        }
+        if not self.portfolio or not self.portfolio_stats:
+            # Try to generate stats if portfolio exists but stats weren't generated
+            if self.portfolio:
+                 try:
+                      self.portfolio_stats = self.portfolio.stats().to_dict() if self.portfolio.stats() is not None else {}
+                 except Exception as e:
+                      print(f"Warning: Could not generate portfolio stats on demand: {e}")
+                      self.portfolio_stats = {}
+
+            if not self.portfolio_stats:
+                 return {"error": "No portfolio or statistics available. Run generate_trades first."}
+
+        # Return the stored portfolio statistics
+        # You might want to select/rename specific stats here if needed
+        # For now, return the raw dictionary from vectorbt
+        return self.portfolio_stats
