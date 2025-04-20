@@ -298,10 +298,16 @@ def _select_and_label_features(self, market_data):
         return None
 
     # 3. Interactive Trade Labeling with calculated features
-    labeled_trades = self._label_trades_interactively(df, self._selected_features)
+    # Call helper directly, passing self
+    labeled_trades = _label_trades_interactively(self, df, self._selected_features)
+
+    # Handle case where user backed out of labeling
+    if labeled_trades is None:
+        return None
 
     # 4. Derive Strategy Parameters
-    strategy_params = self._derive_strategy_parameters(labeled_trades)
+    # Call helper directly, passing self
+    strategy_params = _derive_strategy_parameters(self, labeled_trades)
 
     return {
         'features': self._selected_features,
