@@ -104,46 +104,91 @@ except Exception as e:
     questionary = FallbackQuestionary()
     print(f"Warning: Using fallback questionary due to: {e}")
 
+# Import functions from the new CLI modules
+# Import only functions called directly from SwarmCLI or needed for binding
+from cli.cli_agent_management import (
+    manage_agents_menu,
+    create_agent_workflow,
+    edit_agent_workflow,
+    train_agent_interactive,
+    test_agent,
+    # Helpers needed by other modules via self:
+    _list_existing_agents,
+    _display_agent_config_summary
+)
+from cli.cli_trade_generation import (
+    generate_trades_for_agent_workflow, # Called by analysis menu
+    view_synthetic_trades,             # Called by analysis menu
+    # Helpers needed by other modules via self:
+    generate_synthetic_trades_for_agent,
+    _configure_trade_conditions,
+    _display_trade_statistics
+    # configure_trade_generation, generate_synthetic_trades_workflow are likely standalone
+)
+from cli.cli_trade_analysis import (
+    trade_analysis_menu,
+    filter_trades_workflow,
+    identify_patterns_workflow,
+    generate_rules_workflow,
+    visualize_analysis_workflow
+)
+
+# Also import utilities if needed directly here (e.g., in __init__ or main)
 from utils.agent_config_manager import AgentConfigManager
 from shared.feature_extractor_vectorbt import get_available_features, calculate_all_features
-# from utils.synthetic_trade_generator import SyntheticTradeGenerator # Moved to cli_trade_generation
 from utils.trade_analyzer import TradeAnalyzer
-
-# Import functions from cli.py - commented out until we verify they exist
-# If these imports are causing issues, we'll need to implement alternatives
-# from cli import (
-#     run_strategy, 
-#     train, 
-#     backtest, 
-#     generate_strategy, 
-#     list_agents
-# )
-
-# Import the moved trade generation/viewing functions
-from cli import cli_trade_generation
+# Import setup_logging if you want to call it from main()
+from utils import setup_logging
 
 
 class SwarmCLI:
     def __init__(self):
         self.console = Console()
         self.logger = logging.getLogger(__name__)
-        self.current_context = {
-            'strategy': None,
-            'data_file': None,
-            'profit_threshold': None,
-            'stop_loss': None,
-            'agent_type': None,
-            'agent_name': None
-        }
-        self.current_selections = {}
-        self.display_width = 80  # Default width for the terminal
+        # Context might be less needed here if managed within workflows
+        self.current_context = {} # Can be used by workflows if needed
+        self.current_selections = {} # For display panel
+        self.display_width = 80
         try:
-            # Try to get the actual terminal width
             terminal_width = os.get_terminal_size().columns
             self.display_width = terminal_width
         except:
             pass
+        # Store analyzer instance if needed across analysis steps
+        self.trade_analyzer = None # Initialize trade analyzer instance storage
 
+        # --- BIND METHODS FROM MODULES ---
+        # Bind only the primary menu/workflow entry points and essential shared helpers
+        # that need to be called using `self.method_name()` from *other* modules or from SwarmCLI itself.
+
+        # Agent Management
+        self.manage_agents_menu = manage_agents_menu.__get__(self)
+        self.create_agent_workflow = create_agent_workflow.__get__(self)
+        self.edit_agent_workflow = edit_agent_workflow.__get__(self)
+        self.train_agent_interactive = train_agent_interactive.__get__(self)
+        self.test_agent = test_agent.__get__(self)
+        # Helpers potentially used across modules via self:
+        self._list_existing_agents = _list_existing_agents.__get__(self)
+        self._display_agent_config_summary = _display_agent_config_summary.__get__(self)
+
+        # Trade Generation
+        self.generate_trades_for_agent_workflow = generate_trades_for_agent_workflow.__get__(self) # Called by analysis menu
+        self.view_synthetic_trades = view_synthetic_trades.__get__(self) # Called by analysis menu
+        # Helpers potentially used across modules via self:
+        self.generate_synthetic_trades_for_agent = generate_synthetic_trades_for_agent.__get__(self) # Called by agent creation
+        self._configure_trade_conditions = _configure_trade_conditions.__get__(self) # Called by agent creation
+        self._display_trade_statistics = _display_trade_statistics.__get__(self) # Called by agent creation & analysis
+
+        # Trade Analysis
+        self.trade_analysis_menu = trade_analysis_menu.__get__(self)
+        self.filter_trades_workflow = filter_trades_workflow.__get__(self)
+        self.identify_patterns_workflow = identify_patterns_workflow.__get__(self)
+        self.generate_rules_workflow = generate_rules_workflow.__get__(self)
+        self.visualize_analysis_workflow = visualize_analysis_workflow.__get__(self)
+        # --- END BIND METHODS ---
+
+    # --- Keep remaining methods like display_banner, main_menu, _validate_float, etc. ---
+    # (Make sure the code for these methods is present and correct as provided in the previous step)
     def display_banner(self):
         banner = """
         [bold cyan]SWARM Trading System[/bold cyan]
@@ -153,96 +198,120 @@ class SwarmCLI:
 
     def main_menu(self):
         self.display_banner()
-        
+        self._display_selections_panel() # Display selections panel
+
         choices = [
             "Manage Agents",
             "Analyze Trades",
             "Exit"
         ]
-        
+
         choice = questionary.select(
-            "Select an option:", 
+            "Select an option:",
             choices=choices
         ).ask()
 
+        if choice is None: # Handle Ctrl+C/EOFError during selection
+             raise KeyboardInterrupt
+
         if choice == "Manage Agents":
-            self.manage_agents_menu()
+            self.manage_agents_menu() # Call the bound method
         elif choice == "Analyze Trades":
-            self.trade_analysis_menu()
+            self.trade_analysis_menu() # Call the bound method
         elif choice == "Exit":
+            self.console.print("[yellow]Exiting SWARM Trading System...[/yellow]")
             sys.exit(0)
 
-    def _validate_float(self, value, min_val=0, max_val=1, param_type=None):
+    def _validate_float(self, value, min_val=-np.inf, max_val=np.inf, param_type=None): # Allow wider range by default
+        # Allow 'back' keyword
+        if isinstance(value, str) and value.lower() == 'back':
+             return True
+        # Allow empty string for optional inputs like max_duration
+        if isinstance(value, str) and value == '':
+             # Check if this parameter type allows empty string
+             if param_type == 'max_duration': return True
+             else:
+                  # self.console.print("[red]Input cannot be empty.[/red]") # Maybe allow empty for others too?
+                  # Let the float conversion handle empty string error
+                  pass
+
         try:
             float_val = float(value)
-            
-            # Specific validation for profit factor and stop loss
-            if param_type == 'profit_threshold':
-                # Profit factor: 0 to 1 (0% to 100%)
-                if not (0 <= float_val <= 1):
-                    print("Profit threshold must be between 0 and 1 (0% to 100%)")
-                    return False
-            
-            elif param_type == 'stop_loss':
-                # Stop loss: 0 to 0.05 (0% to 5%)
-                if not (0 <= float_val <= 0.05):
-                    print("Stop loss must be between 0 and 0.05 (0% to 5%)")
-                    return False
-            
-            return min_val <= float_val <= max_val
-        
+            if not (min_val <= float_val <= max_val):
+                 self.console.print(f"[red]Value must be between {min_val} and {max_val}.[/red]")
+                 return False
+            return True
         except ValueError:
-            print("Invalid input. Please enter a numeric value.")
+            # Provide specific message if empty string caused error and wasn't allowed
+            if value == '' and param_type != 'max_duration':
+                 self.console.print("[red]Input cannot be empty.[/red]")
+            else:
+                 self.console.print("[red]Invalid input. Please enter a numeric value or 'back'.[/red]")
             return False
 
     def _reset_context(self, keep_keys=None):
-        """Reset context while optionally preserving specific keys"""
-        default_context = {
-            'strategy': None,
-            'data_file': None,
-            'profit_threshold': None,
-            'stop_loss': None,
-            'agent_type': None,
-            'agent_name': None
-        }
-        if keep_keys:
-            for key in keep_keys:
-                default_context[key] = self.current_context.get(key)
-        self.current_context = default_context
+        """Reset context - less relevant now, workflows manage their state"""
+        self.current_context = {} # Simplified reset
+        # If specific keys need preserving across top-level menus, handle here
+        # e.g., if keep_keys: preserved_context = {k: self.current_context.get(k) for k in keep_keys} ...
 
-    def _find_csv_files(self, directory='data/price_data'):
+    def _find_csv_files(self, directory='data'): # Broaden search slightly
         csv_files = []
-        for root, dirs, files in os.walk(directory):
-            for file in files:
-                if file.endswith('.csv'):
-                    relative_path = os.path.relpath(os.path.join(root, file), directory)
-                    csv_files.append(relative_path)
-        return csv_files
+        if not os.path.isdir(directory):
+             self.console.print(f"[red]Directory not found: {directory}[/red]")
+             return []
+        try:
+            for root, dirs, files in os.walk(directory):
+                # Skip hidden directories like .git, .vscode etc.
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+                for file in files:
+                    if file.endswith('.csv'):
+                        # Get path relative to the initial directory
+                        relative_path = os.path.relpath(os.path.join(root, file), directory)
+                        csv_files.append(relative_path)
+            return sorted(csv_files)
+        except Exception as e:
+             self.console.print(f"[red]Error finding CSV files in {directory}: {e}[/red]")
+             return []
 
-    def _select_market_data(self):
-        # Enhanced file selection with back option
-        choices = self._find_csv_files() + ['Back']
-        
-        selected_file = questionary.select(
+    def _select_market_data(self, base_dir='data/price_data'):
+        """Selects market data, returning the full path."""
+        self.console.print(f"Searching for CSV files in: [cyan]{base_dir}[/cyan]")
+        choices = self._find_csv_files(base_dir) # Pass base directory
+
+        if not choices:
+             self.console.print(f"[yellow]No CSV files found in {base_dir}.[/yellow]")
+             # Offer to go back or maybe select from a different dir?
+             return 'back' # Simple back option
+
+        choices.append('Back')
+
+        selected_file_relative = questionary.select(
             "Select market data file:",
             choices=choices
         ).ask()
 
-        if selected_file == 'Back':
-            return 'back'
+        if selected_file_relative is None: # Handle Ctrl+C/EOFError
+            raise KeyboardInterrupt
+        if selected_file_relative == 'Back':
+            return 'back' # Return 'back' string
 
-        # Construct full path to the selected file
-        full_path = os.path.join('data/price_data', selected_file)
-        
-        # Validate file exists and is readable
+        # Construct full path
+        full_path = os.path.join(base_dir, selected_file_relative)
+
+        # Validate file exists (redundant check, but safe)
         if not os.path.exists(full_path):
             self.console.print(f"[red]Error: File {full_path} does not exist.[/red]")
             return 'back'
 
-        self.current_context['data_file'] = full_path
-        return full_path
+        # Update selection panel for context
+        self._update_selection("Market Data", selected_file_relative)
+        return full_path # Return the full path
 
-    def _select_and_label_features(self, market_data):
+    # --- Agent Feature Selection/Labeling Methods Moved to cli_agent_management.py ---
+    # (Methods like _select_and_label_features are bound in __init__)
+
+    def backtesting_menu(self):
         """
         Interactive feature selection and trade labeling workflow
         
@@ -458,8 +527,6 @@ class SwarmCLI:
             ))
         }
         
-        return strategy_params
-
     def backtesting_menu(self):
         choices = [
             "Run Backtest",
@@ -500,794 +567,13 @@ class SwarmCLI:
         
         # backtest(strategy=strategy, data=data_path, report=report_path)
         
-        self.backtesting_menu()
-
     # --- Trade Generation/Viewing Methods Moved to cli/cli_trade_generation.py ---
 
-    # Method definition removed: generate_synthetic_trades_for_agent
+    # --- Trade Analysis Methods Moved to cli/cli_trade_analysis.py ---
 
-    def trade_analysis_menu(self):
-        """
-        Menu for trade analysis
-        
-        Args:
-            agent_name (str): Name of the agent
-            features (list): Features selected for the agent
-            market_data_path (str, optional): Path to market data
-            
-        Returns:
-            str: Path to saved trades or None
-        """
-        # If no market data provided, ask for it
-        if not market_data_path:
-            market_data_path = self._select_market_data()
-            
-            if market_data_path == 'back' or market_data_path == 'cancel':
-                return None
-        
-        # Configure risk/reward parameters
-        rr_ratio = questionary.text(
-            "Enter risk/reward ratio (e.g., 2.0 means TP is 2x SL):",
-            validate=lambda x: self._validate_float(x, 0.1, 10),
-            default="2.0"
-        ).ask()
-        
-        stop_loss = questionary.text(
-            "Enter stop loss percentage (e.g., 0.01 for 1%):",
-            validate=lambda x: self._validate_float(x, 0.001, 0.1),
-            default="0.01"
-        ).ask()
-        
-        # Calculate take profit based on RR ratio
-        take_profit = float(stop_loss) * float(rr_ratio)
-        
-        # Configure account and trade size
-        account_size = questionary.text(
-            "Enter account size in dollars:",
-            validate=lambda x: self._validate_float(x, 100, 10000000),
-            default="10000"
-        ).ask()
-        
-        trade_size = questionary.text(
-            "Enter trade size in dollars (can be larger than account for leverage):",
-            validate=lambda x: self._validate_float(x, 100, 10000000),
-            default="100000"
-        ).ask()
-        
-        # Generate entry/exit conditions based on selected features
-        entry_conditions = {}
-        exit_conditions = {}
-        
-        # Create default conditions based on selected features
-        for feature in features:
-            if feature == 'rsi':
-                entry_conditions['rsi'] = {'below': 30}
-                exit_conditions['rsi'] = {'above': 70}
-            elif feature == 'macd':
-                entry_conditions['macd_hist'] = {'cross_above': 0}
-                exit_conditions['macd_hist'] = {'cross_below': 0}
-            elif feature == 'bollinger_bands':
-                entry_conditions['bb_lower'] = {'below': 0}
-                exit_conditions['bb_upper'] = {'above': 0}
-            elif feature in ['sma_20', 'ema_20']:
-                entry_conditions[feature] = {'cross_above': 0}
-                exit_conditions[feature] = {'cross_below': 0}
-        
-        # Allow user to customize conditions
-        customize_conditions = questionary.confirm(
-            "Would you like to customize entry/exit conditions?"
-        ).ask()
-        
-        if customize_conditions:
-            self.console.print("[yellow]Configuring entry conditions...[/yellow]")
-            entry_conditions = self._configure_trade_conditions("entry")
-            
-            self.console.print("[yellow]Configuring exit conditions...[/yellow]")
-            exit_conditions = self._configure_trade_conditions("exit")
-        
-        # Configure additional parameters
-        save_winning_only = questionary.confirm(
-            "Save only winning trades?"
-        ).ask()
-        
-        min_profit = "0.0"
-        if save_winning_only:
-            min_profit = questionary.text(
-                "Minimum profit percentage to consider a winning trade:",
-                validate=lambda x: self._validate_float(x, 0, 100),
-                default="0.0"
-            ).ask()
-        
-        # Generate trades
-        self.console.print("[bold green]Generating synthetic trades...[/bold green]")
-        
-        try:
-            # Load market data
-            df = pd.read_csv(market_data_path)
-            
-            # Configure trade generator
-            config = {
-                'risk_reward_ratio': float(rr_ratio),
-                'stop_loss_pct': float(stop_loss),
-                'take_profit_pct': take_profit,
-                'save_winning_only': save_winning_only,
-                'min_profit_threshold': float(min_profit),
-                'account_size': float(account_size),
-                'trade_size': float(trade_size)
-            }
-            
-            generator = SyntheticTradeGenerator(config)
-            
-            # Generate trades
-            trades_df = generator.generate_trades(df, entry_conditions, exit_conditions)
-            
-            if len(trades_df) == 0:
-                self.console.print("[red]No trades were generated with the given parameters.[/red]")
-                return None
-            
-            # Display trade statistics
-            stats = generator.get_trade_statistics()
-            self._display_trade_statistics(stats)
-            
-            # Save trades with agent name in filename
-            save_trades = questionary.confirm("Save generated trades to CSV?").ask()
-            
-            if save_trades:
-                # Create directory if it doesn't exist
-                os.makedirs('data/synthetic_trades', exist_ok=True)
-                
-                # Generate filename with agent name
-                timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                filename = f'{agent_name}_trades_{timestamp}.csv'
-                
-                output_path = generator.save_trades(filename=filename)
-                self.console.print(f"[green]Trades saved to: {output_path}[/green]")
-                return output_path
-            
-            return None
-            
-        except Exception as e:
-            self.console.print(f"[red]Error generating synthetic trades: {e}[/red]")
-            import traceback
-            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            return None
-
-    # Method definition removed: generate_synthetic_trades_workflow
-        market_data_path = self._select_market_data()
-        
-        if market_data_path == 'back':
-            return self.synthetic_trades_menu()
-        
-        # 2. Configure risk/reward parameters
-        rr_ratio = questionary.text(
-            "Enter risk/reward ratio (e.g., 2.0 means TP is 2x SL):",
-            validate=lambda x: self._validate_float(x, 0.1, 10),
-            default="2.0"
-        ).ask()
-        
-        stop_loss = questionary.text(
-            "Enter stop loss percentage (e.g., 0.01 for 1%):",
-            validate=lambda x: self._validate_float(x, 0.001, 0.1),
-            default="0.01"
-        ).ask()
-        
-        # Calculate take profit based on RR ratio
-        take_profit = float(stop_loss) * float(rr_ratio)
-        
-        # 3. Configure entry/exit conditions
-        self.console.print("[yellow]Configuring entry conditions...[/yellow]")
-        entry_conditions = self._configure_trade_conditions("entry")
-        
-        self.console.print("[yellow]Configuring exit conditions...[/yellow]")
-        exit_conditions = self._configure_trade_conditions("exit")
-        
-        # 4. Configure additional parameters
-        save_winning_only = questionary.confirm(
-            "Save only winning trades?"
-        ).ask()
-        
-        min_profit = "0.0"
-        if save_winning_only:
-            min_profit = questionary.text(
-                "Minimum profit percentage to consider a winning trade:",
-                validate=lambda x: self._validate_float(x, 0, 100),
-                default="0.0"
-            ).ask()
-        
-        # 5. Generate trades
-        self.console.print("[bold green]Generating synthetic trades...[/bold green]")
-        
-        try:
-            # Load market data
-            df = pd.read_csv(market_data_path)
-            
-            # Configure trade generator
-            config = {
-                'risk_reward_ratio': float(rr_ratio),
-                'stop_loss_pct': float(stop_loss),
-                'take_profit_pct': take_profit,
-                'save_winning_only': save_winning_only,
-                'min_profit_threshold': float(min_profit)
-            }
-            
-            generator = SyntheticTradeGenerator(config)
-            
-            # Generate trades
-            trades_df = generator.generate_trades(df, entry_conditions, exit_conditions)
-            
-            if len(trades_df) == 0:
-                self.console.print("[red]No trades were generated with the given parameters.[/red]")
-                return self.synthetic_trades_menu()
-            
-            # Display trade statistics
-            stats = generator.get_trade_statistics()
-            self._display_trade_statistics(stats)
-            
-            # Save trades
-            save_trades = questionary.confirm("Save generated trades to CSV?").ask()
-            
-            if save_trades:
-                output_path = generator.save_trades()
-                self.console.print(f"[green]Trades saved to: {output_path}[/green]")
-            
-            # Return to menu
-            self.synthetic_trades_menu()
-            
-        except Exception as e:
-            self.console.print(f"[red]Error generating synthetic trades: {e}[/red]")
-            import traceback
-            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            self.synthetic_trades_menu()
-
-    # Method definition removed: _configure_trade_conditions
-        
-        Args:
-            condition_type (str): 'entry' or 'exit'
-            
-        Returns:
-            dict: Configured conditions
-        """
-        conditions = {}
-        
-        # Available indicators
-        indicators = [
-            'rsi', 
-            'macd', 
-            'macd_signal', 
-            'macd_hist',
-            'bb_upper', 
-            'bb_lower', 
-            'bb_middle',
-            'sma_20', 
-            'ema_20',
-            'pct_change',
-            'daily_pct_change',
-            'Back'
-        ]
-        
-        # Available operators
-        operators = {
-            'above': 'Value is above threshold',
-            'below': 'Value is below threshold',
-            'cross_above': 'Value crosses above threshold',
-            'cross_below': 'Value crosses below threshold'
-        }
-        
-        # Loop until user selects 'Done'
-        while True:
-            indicator = questionary.select(
-                f"Select indicator for {condition_type} condition (or 'Back' when done):",
-                choices=indicators
-            ).ask()
-            
-            if indicator == 'Back':
-                break
-            
-            # Select operator
-            operator_choices = list(operators.keys())
-            operator = questionary.select(
-                f"Select operator for {indicator}:",
-                choices=operator_choices
-            ).ask()
-            
-            # Get threshold value
-            threshold = questionary.text(
-                f"Enter threshold value for {indicator} {operator}:",
-                validate=lambda x: self._validate_float(x, -1000, 1000),
-                default="30" if indicator == 'rsi' and operator == 'below' else
-                       "70" if indicator == 'rsi' and operator == 'above' else
-                       "0"
-            ).ask()
-            
-            # Add condition
-            if indicator not in conditions:
-                conditions[indicator] = {}
-            
-            conditions[indicator][operator] = float(threshold)
-            
-            self.console.print(f"[green]Added condition: {indicator} {operator} {threshold}[/green]")
-        
-        return conditions
-
-    # Method definition removed: _display_trade_statistics
-        
-        Args:
-            stats (dict): Trade statistics
-        """
-        table = Table(title="Synthetic Trade Statistics")
-        table.add_column("Metric", style="cyan")
-        table.add_column("Value", style="green")
-        
-        # Add rows for each statistic
-        for key, value in stats.items():
-            # Format percentages and ratios
-            if 'pct' in key or 'rate' in key:
-                formatted_value = f"{value:.2f}%" if isinstance(value, (int, float)) else str(value)
-            elif 'ratio' in key or 'factor' in key:
-                formatted_value = f"{value:.2f}" if isinstance(value, (int, float)) else str(value)
-            else:
-                formatted_value = str(value)
-            
-            table.add_row(key.replace('_', ' ').title(), formatted_value)
-        
-        self.console.print(table)
-
-    # Method definition removed: view_synthetic_trades
-        trade_files = self._find_csv_files('data/synthetic_trades')
-        
-        if not trade_files:
-            self.console.print("[yellow]No synthetic trade files found.[/yellow]")
-            return self.synthetic_trades_menu()
-        
-        # Add back option
-        trade_files.append('Back')
-        
-        # Select file to view
-        selected_file = questionary.select(
-            "Select trade file to view:",
-            choices=trade_files
-        ).ask()
-        
-        if selected_file == 'Back':
-            return self.synthetic_trades_menu()
-        
-        # Load and display trade file
-        try:
-            file_path = os.path.join('data/synthetic_trades', selected_file)
-            trades_df = pd.read_csv(file_path)
-            
-            # Display summary
-            self.console.print(f"[bold]File: {selected_file}[/bold]")
-            self.console.print(f"Total trades: {len(trades_df)}")
-            
-            # Calculate statistics
-            winning_trades = trades_df[trades_df['pnl_pct'] > 0]
-            win_rate = len(winning_trades) / len(trades_df) if len(trades_df) > 0 else 0
-            
-            self.console.print(f"Winning trades: {len(winning_trades)} ({win_rate:.2%})")
-            self.console.print(f"Average profit: {trades_df['pnl_pct'].mean():.2f}%")
-            
-            # Display sample of trades
-            self.console.print("\n[bold]Sample trades:[/bold]")
-            sample_size = min(5, len(trades_df))
-            sample = trades_df.sample(sample_size) if sample_size > 0 else trades_df
-            
-            # Create table for sample trades
-            table = Table(title=f"Sample of {sample_size} trades")
-            table.add_column("Entry Time", style="cyan")
-            table.add_column("Exit Time", style="cyan")
-            table.add_column("Direction", style="yellow")
-            table.add_column("Entry Price", style="green")
-            table.add_column("Exit Price", style="green")
-            table.add_column("PnL %", style="bold green")
-            table.add_column("Exit Type", style="magenta")
-            
-            for _, row in sample.iterrows():
-                pnl_color = "green" if row['pnl_pct'] > 0 else "red"
-                table.add_row(
-                    str(row['entry_time']),
-                    str(row['exit_time']),
-                    row['direction'],
-                    f"{row['entry_price']:.2f}",
-                    f"{row['exit_price']:.2f}",
-                    f"[{pnl_color}]{row['pnl_pct']:.2f}%[/{pnl_color}]",
-                    row['exit_type']
-                )
-            
-            self.console.print(table)
-            
-            # Options for this file
-            file_options = [
-                "View Full Details",
-                "Export to Excel",
-                "Delete File",
-                "Back to Trade Files"
-            ]
-            
-            file_action = questionary.select(
-                "Select action:",
-                choices=file_options
-            ).ask()
-            
-            if file_action == "View Full Details":
-                # Display more detailed information
-                self.console.print("\n[bold]Trade Details:[/bold]")
-                self.console.print(trades_df.describe())
-                
-            elif file_action == "Export to Excel":
-                # Export to Excel
-                excel_path = file_path.replace('.csv', '.xlsx')
-                trades_df.to_excel(excel_path, index=False)
-                self.console.print(f"[green]Exported to: {excel_path}[/green]")
-                
-            elif file_action == "Delete File":
-                # Confirm deletion
-                confirm = questionary.confirm(f"Are you sure you want to delete {selected_file}?").ask()
-                if confirm:
-                    os.remove(file_path)
-                    self.console.print(f"[yellow]Deleted: {selected_file}[/yellow]")
-            
-            # Return to view trades
-            return self.view_synthetic_trades()
-            
-        except Exception as e:
-            self.console.print(f"[red]Error viewing trade file: {e}[/red]")
-            return self.synthetic_trades_menu()
-
-    # Method definition removed: configure_trade_generation
-        """
-        # Default configuration
-        default_config = {
-            'risk_reward_ratio': 2.0,
-            'stop_loss_pct': 0.01,
-            'take_profit_pct': 0.02,
-            'max_trades_per_day': 5,
-            'min_trade_interval': 5,
-            'entry_threshold': 0.7,
-            'exit_threshold': 0.3,
-            'use_dynamic_sl_tp': False,
-            'atr_multiplier_sl': 1.5,
-            'atr_multiplier_tp': 3.0,
-            'atr_window': 14,
-            'save_winning_only': False,
-            'min_profit_threshold': 0.0
-        }
-        
-        # Load existing configuration if available
-        config_path = 'agents/configs/trade_generator_config.json'
-        config = default_config
-        
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, 'r') as f:
-                    import json
-                    config = json.load(f)
-            except:
-                pass
-        
-        # Display current configuration
-        self.console.print("[bold]Current Trade Generation Configuration:[/bold]")
-        for key, value in config.items():
-            self.console.print(f"- {key}: {value}")
-        
-        # Select parameter to modify
-        param_choices = list(config.keys()) + ['Save and Exit', 'Back without Saving']
-        
-        param = questionary.select(
-            "Select parameter to modify:",
-            choices=param_choices
-        ).ask()
-        
-        if param == 'Save and Exit':
-            # Save configuration
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            with open(config_path, 'w') as f:
-                import json
-                json.dump(config, f, indent=4)
-            self.console.print(f"[green]Configuration saved to: {config_path}[/green]")
-            return self.synthetic_trades_menu()
-            
-        elif param == 'Back without Saving':
-            return self.synthetic_trades_menu()
-        
-        # Modify selected parameter
-        current_value = config[param]
-        
-        if isinstance(current_value, bool):
-            # Boolean parameter
-            new_value = questionary.confirm(
-                f"Set {param} to True?",
-                default=current_value
-            ).ask()
-        else:
-            # Numeric parameter
-            new_value = questionary.text(
-                f"Enter new value for {param} (current: {current_value}):",
-                validate=lambda x: self._validate_float(x),
-                default=str(current_value)
-            ).ask()
-            
-            # Convert to appropriate type
-            if isinstance(current_value, int):
-                new_value = int(float(new_value))
-            else:
-                new_value = float(new_value)
-        
-        # Update configuration
-        config[param] = new_value
-        self.console.print(f"[green]Updated {param} to {new_value}[/green]")
-
-    # --- Trade Generation/Viewing Methods Moved to cli/cli_trade_generation.py ---
-
-    # Method definition removed: generate_trades_for_agent_workflow
-
-    def trade_analysis_menu(self):
-        """
-        Menu for trade analysis
-        """
-        choices = [
-            "Generate Trades for Existing Agent",
-            "View Existing Trades",
-            "Filter Profitable Trades",
-            "Identify Trade Patterns",
-            "Generate Trading Rules",
-            "Visualize Trade Analysis",
-            "Back to Main Menu"
-        ]
-        
-        choice = questionary.select(
-            "Trade Analysis Menu:", 
-            choices=choices
-        ).ask()
-
-        if choice == "Generate Trades for Existing Agent":
-            self.generate_trades_for_agent_workflow()
-        elif choice == "View Existing Trades":
-            self.view_synthetic_trades()
-        elif choice == "Filter Profitable Trades":
-            self.filter_trades_workflow()
-        elif choice == "Identify Trade Patterns":
-            self.identify_patterns_workflow()
-        elif choice == "Generate Trading Rules":
-            self.generate_rules_workflow()
-        elif choice == "Visualize Trade Analysis":
-            self.visualize_analysis_workflow()
-        elif choice == "Back to Main Menu":
-            self.main_menu()
-    
-    def filter_trades_workflow(self):
-        """
-        Workflow for filtering profitable trades
-        """
-        # 1. Select trade file
-        trade_files = self._find_csv_files('data/synthetic_trades')
-        
-        if not trade_files:
-            self.console.print("[yellow]No synthetic trade files found. Generate trades first.[/yellow]")
-            return self.trade_analysis_menu()
-        
-        # Add back option
-        trade_files.append('Back')
-        
-        selected_file = questionary.select(
-            "Select trade file to analyze:",
-            choices=trade_files
-        ).ask()
-        
-        if selected_file == 'Back':
-            return self.trade_analysis_menu()
-        
-        file_path = os.path.join('data/synthetic_trades', selected_file)
-        
-        # 2. Configure filtering parameters
-        min_profit = questionary.text(
-            "Minimum profit percentage to consider a trade profitable:",
-            validate=lambda x: self._validate_float(x, 0, 100),
-            default="1.0"
-        ).ask()
-        
-        min_rr = questionary.text(
-            "Minimum risk/reward ratio:",
-            validate=lambda x: self._validate_float(x, 0, 10),
-            default="1.5"
-        ).ask()
-        
-        max_duration = questionary.text(
-            "Maximum trade duration (in bars):",
-            validate=lambda x: x.isdigit(),
-            default="100"
-        ).ask()
-        
-        # 3. Perform filtering
-        self.console.print("[bold green]Filtering profitable trades...[/bold green]")
-        
-        try:
-            # Initialize analyzer
-            analyzer = TradeAnalyzer({
-                'min_profit_threshold': float(min_profit),
-                'min_risk_reward': float(min_rr),
-                'max_duration': int(max_duration)
-            })
-            
-            # Load and filter trades
-            analyzer.load_trades(file_path)
-            filtered_trades = analyzer.filter_profitable_trades()
-            
-            if len(filtered_trades) == 0:
-                self.console.print("[red]No trades met the filtering criteria.[/red]")
-                return self.trade_analysis_menu()
-            
-            # Display statistics
-            stats = analyzer.get_summary_statistics()
-            self._display_trade_statistics(stats)
-            
-            # Save filtered trades
-            save_filtered = questionary.confirm("Save filtered trades to CSV?").ask()
-            
-            if save_filtered:
-                output_path = analyzer.save_filtered_trades()
-                self.console.print(f"[green]Filtered trades saved to: {output_path}[/green]")
-            
-            # Continue to pattern identification?
-            continue_to_patterns = questionary.confirm("Continue to pattern identification?").ask()
-            
-            if continue_to_patterns:
-                # Store analyzer in instance for next step
-                self.trade_analyzer = analyzer
-                return self.identify_patterns_workflow(analyzer)
-            
-            # Return to menu
-            return self.trade_analysis_menu()
-            
-        except Exception as e:
-            self.console.print(f"[red]Error filtering trades: {e}[/red]")
-            import traceback
-            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            return self.trade_analysis_menu()
-    
-    def identify_patterns_workflow(self, analyzer=None):
-        """
-        Workflow for identifying trade patterns
-        
-        Args:
-            analyzer (TradeAnalyzer, optional): Existing analyzer with filtered trades
-        """
-        if analyzer is None:
-            # Check if we have a stored analyzer
-            if hasattr(self, 'trade_analyzer'):
-                analyzer = self.trade_analyzer
-            else:
-                self.console.print("[yellow]No filtered trades available. Filter trades first.[/yellow]")
-                return self.trade_analysis_menu()
-        
-        # Configure clustering parameters
-        n_clusters = questionary.text(
-            "Number of clusters for pattern identification:",
-            validate=lambda x: x.isdigit() and int(x) > 0,
-            default="3"
-        ).ask()
-        
-        # Perform pattern identification
-        self.console.print("[bold green]Identifying trade patterns...[/bold green]")
-        
-        try:
-            # Identify patterns
-            patterns = analyzer.identify_trade_patterns(int(n_clusters))
-            
-            # Calculate feature importance
-            importance = analyzer.calculate_feature_importance()
-            
-            # Display patterns
-            self.console.print("[bold]Identified Trade Patterns:[/bold]")
-            
-            for pattern_id, pattern in patterns.items():
-                self.console.print(f"\n[bold cyan]{pattern_id}[/bold cyan]")
-                self.console.print(f"Trade Count: {pattern['trade_count']}")
-                self.console.print(f"Average Profit: {pattern['avg_profit']:.2f}%")
-                self.console.print(f"Win Rate: {pattern['win_rate']:.2f}")
-                
-                # Display top features for this pattern
-                self.console.print("\nKey Feature Values:")
-                for feature, value in pattern['feature_values'].items():
-                    if feature in importance and importance[feature] > 0.05:
-                        self.console.print(f"- {feature}: {value:.4f} (importance: {importance[feature]:.4f})")
-            
-            # Continue to rule generation?
-            continue_to_rules = questionary.confirm("Continue to trading rule generation?").ask()
-            
-            if continue_to_rules:
-                return self.generate_rules_workflow(analyzer)
-            
-            # Return to menu
-            return self.trade_analysis_menu()
-            
-        except Exception as e:
-            self.console.print(f"[red]Error identifying patterns: {e}[/red]")
-            import traceback
-            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            return self.trade_analysis_menu()
-    
-    def generate_rules_workflow(self, analyzer=None):
-        """
-        Workflow for generating trading rules
-        
-        Args:
-            analyzer (TradeAnalyzer, optional): Existing analyzer with identified patterns
-        """
-        if analyzer is None:
-            # Check if we have a stored analyzer
-            if hasattr(self, 'trade_analyzer'):
-                analyzer = self.trade_analyzer
-                
-                # Check if patterns have been identified
-                if analyzer.trade_patterns is None:
-                    self.console.print("[yellow]No patterns identified. Identify patterns first.[/yellow]")
-                    return self.trade_analysis_menu()
-            else:
-                self.console.print("[yellow]No patterns identified. Identify patterns first.[/yellow]")
-                return self.trade_analysis_menu()
-        
-        # Generate trading rules
-        self.console.print("[bold green]Generating trading rules...[/bold green]")
-        
-        try:
-            # Generate rules
-            rules = analyzer.generate_trade_rules()
-            
-            if not rules:
-                self.console.print("[yellow]No significant trading rules could be generated.[/yellow]")
-                return self.trade_analysis_menu()
-            
-            # Display rules
-            self.console.print("[bold]Generated Trading Rules:[/bold]")
-            
-            for i, rule in enumerate(rules, 1):
-                self.console.print(f"\n[bold cyan]Rule #{i} (Pattern: {rule['pattern_id']})[/bold cyan]")
-                self.console.print(f"Expected Profit: {rule['expected_profit']:.2f}%")
-                self.console.print(f"Win Rate: {rule['win_rate']:.2f}")
-                self.console.print(f"Based on {rule['trade_count']} trades")
-                
-                # Display conditions
-                self.console.print("\nEntry Conditions:")
-                for cond in rule['conditions']:
-                    self.console.print(f"- {cond['feature']} {cond['operator']} {cond['threshold']:.4f} (importance: {cond['importance']:.4f})")
-            
-            # Save rules to file
-            save_rules = questionary.confirm("Save trading rules to file?").ask()
-            
-            if save_rules:
-                # Create output directory
-                os.makedirs('data/trading_rules', exist_ok=True)
-                
-                # Generate filename
-                timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                output_path = f'data/trading_rules/rules_{timestamp}.json'
-                
-                # Save rules
-                with open(output_path, 'w') as f:
-                    import json
-                    json.dump(rules, f, indent=4)
-                
-                self.console.print(f"[green]Trading rules saved to: {output_path}[/green]")
-            
-            # Visualize analysis?
-            visualize = questionary.confirm("Visualize trade analysis?").ask()
-            
-            if visualize:
-                return self.visualize_analysis_workflow(analyzer)
-            
-            # Return to menu
-            return self.trade_analysis_menu()
-            
-        except Exception as e:
-            self.console.print(f"[red]Error generating rules: {e}[/red]")
-            import traceback
-            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            return self.trade_analysis_menu()
-    
     def _display_selections_panel(self):
         """
-        Display current selections in a panel on the right side of the terminal
+        Displays current selections in a panel.
         """
         if not self.current_selections:
             return
@@ -1330,22 +616,19 @@ class SwarmCLI:
         """
         Update the current selections and display the panel
         
-        Args:
-            key (str): Selection key
-            value: Selection value
-        """
-        self.current_selections[key] = value
-        self._display_selections_panel()
-    
-    def _clear_selections(self):
-        """
-        Clear the current selections
-        """
-        self.current_selections = {}
-    
-    def generate_trades_for_agent_workflow(self):
-        """
-        Workflow to generate synthetic trades for an existing agent
+# Assign the imported functions as methods to the SwarmCLI class
+# This allows calling them using self.method_name(...) within SwarmCLI
+# SwarmCLI.generate_synthetic_trades_for_agent = cli_trade_generation.generate_synthetic_trades_for_agent
+# SwarmCLI.generate_synthetic_trades_workflow = cli_trade_generation.generate_synthetic_trades_workflow
+# SwarmCLI.generate_trades_for_agent_workflow = cli_trade_generation.generate_trades_for_agent_workflow
+# SwarmCLI._configure_trade_conditions = cli_trade_generation._configure_trade_conditions
+# SwarmCLI._display_trade_statistics = cli_trade_generation._display_trade_statistics
+# SwarmCLI.view_synthetic_trades = cli_trade_generation.view_synthetic_trades
+# SwarmCLI.configure_trade_generation = cli_trade_generation.configure_trade_generation
+
+
+if __name__ == "__main__":
+    main()
         """
         # 1. Select an Agent
         agents = self._list_existing_agents()
