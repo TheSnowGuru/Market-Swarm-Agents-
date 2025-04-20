@@ -16,9 +16,11 @@ except ImportError:
 
 from utils.agent_config_manager import AgentConfigManager
 from shared.feature_extractor_vectorbt import get_available_features, calculate_all_features
-from utils.trade_analyzer import TradeAnalyzer # Needed for potential analysis calls
+# from utils.trade_analyzer import TradeAnalyzer # No longer needed here
 from utils.backtest_utils import backtest_results_manager # Needed for test_agent
 from utils.vectorbt_utils import simulate_trading_strategy # Needed for test_agent
+from rich import print as rprint # For better dict printing
+
 # Import trade generation functions needed by agent workflows
 from .cli_trade_generation import generate_synthetic_trades_for_agent, _display_trade_statistics, _configure_trade_conditions
 # Import trade analysis functions needed by agent workflows
@@ -149,281 +151,226 @@ def _save_or_continue(self):
         return 'cancel'
 
 def _save_strategy(self, strategy_name=None, market_data=None, profit_threshold=None,
-                   stop_loss=None, features=None, backtest_results=None):
+                   stop_loss=None, features=None, derived_parameters=None, backtest_results=None): # Add derived_parameters
     """
     Save strategy configuration with optional detailed parameters
 
     Args:
         strategy_name (str, optional): Name of the strategy
         market_data (str, optional): Path to market data
-        profit_threshold (float, optional): Profit threshold
-        stop_loss (float, optional): Stop loss threshold
+        profit_threshold (float, optional): Profit threshold (Maybe less relevant now?)
+        stop_loss (float, optional): Stop loss threshold (Maybe less relevant now?)
         features (list, optional): Selected features
+        derived_parameters (dict, optional): Parameters derived from synthetic trades
         backtest_results (list, optional): Backtest trade results
     """
     strategy_config = {
         'name': strategy_name or 'default_strategy',
         'market_data': market_data,
-        'profit_threshold': profit_threshold,
-        'stop_loss': stop_loss,
+        # 'profit_threshold': profit_threshold, # Consider if these are still needed
+        # 'stop_loss': stop_loss,
         'features': features,
-        'backtest_results': backtest_results
+        'derived_parameters': derived_parameters, # Save the derived params
+        'backtest_results': backtest_results # Placeholder
     }
 
-    # TODO: Implement actual strategy saving logic
-    # For now, just print and reset context
-    self.console.print("[green]Strategy saved successfully![/green]")
-    self.console.print(f"Strategy Details: {strategy_config}")
-    self._reset_context()
+    # TODO: Implement actual strategy saving logic (e.g., save to JSON)
+    # For now, just print and reset context (if desired)
+    self.console.print(f"[green]Strategy '{strategy_name}' configuration prepared (Saving not implemented):[/green]")
+    # Use rich print for better dict display
+    # from rich import print as rprint # Already imported likely
+    rprint(strategy_config)
+    # self._reset_context() # Resetting context might not be desired here
 
-def _select_and_label_features(self, market_data):
+
+def _select_and_label_features(self, market_data_path):
     """
-    Interactive feature selection and trade labeling workflow
+    Interactive feature selection and automatic strategy parameter derivation
+    based on generated synthetic trades.
 
     Args:
-        market_data (str): Path to market data CSV
+        market_data_path (str): Path to market data CSV
 
     Returns:
-        dict: Comprehensive feature and trade labeling configuration
+        dict: Dictionary containing selected features and derived strategy parameters,
+              or None if the process is cancelled or fails.
     """
-    # 1. Feature Selection (only if not already selected)
+    # 1. Feature Selection
     if not hasattr(self, '_selected_features'):
         try:
-            # Get available features from vectorbt feature extractor
             available_features = get_available_features()
+            self.console.print("[yellow]Note: Select features relevant for potential entry/exit signals.[/yellow]")
 
-            # Limit the number of features that can be selected to prevent app crashes
-            self.console.print("[yellow]Note: For optimal performance, select features strategically.[/yellow]")
-            self.console.print("[yellow]Vectorbt with numba will accelerate calculations.[/yellow]")
-
+            # Use self._selected_features to store the selection
             self._selected_features = questionary.checkbox(
-                "Select features for strategy analysis (press Enter when done, or select none and press Enter to go back):",
+                "Select features for strategy analysis (press Enter when done):",
                 choices=available_features
             ).ask()
 
-            # If no features selected, treat as "Back" option
             if not self._selected_features:
-                return None
+                self.console.print("[yellow]No features selected. Returning to previous menu.[/yellow]")
+                return None # User selected nothing
 
-            # Display selected features
             self.console.print("[bold]Selected Features:[/bold]")
             for feature in self._selected_features:
                 self.console.print(f"- {feature}")
+            self._update_selection("Features", self._selected_features)
+
         except Exception as e:
             self.console.print(f"[red]Error during feature selection: {e}[/red]")
             return None
 
-    # 2. Load Market Data and Calculate Features
+    # 2. Load Market Data and Calculate Selected Features
     try:
-        df = pd.read_csv(market_data)
-
-        # Ensure required columns exist
-        required_columns = ['Close', 'Open', 'High', 'Low', 'Volume']
+        df = pd.read_csv(market_data_path)
+        # --- Data Validation/Preparation (Ensure OHLCV) ---
+        required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
         missing_columns = [col for col in required_columns if col not in df.columns]
-
         if missing_columns:
-            self.console.print(f"[red]Missing required columns: {', '.join(missing_columns)}[/red]")
-
-            # Try to handle common column name variations
-            column_mapping = {
-                'close': 'Close',
-                'open': 'Open',
-                'high': 'High',
-                'low': 'Low',
-                'volume': 'Volume'
-            }
-
-            # Check if lowercase versions exist and rename them
-            for lower, upper in column_mapping.items():
-                if lower in df.columns and upper not in df.columns:
-                    df[upper] = df[lower]
-                    self.console.print(f"[yellow]Renamed column '{lower}' to '{upper}'[/yellow]")
-
-            # Check again after renaming
-            missing_columns = [col for col in required_columns if col not in df.columns]
+            column_mapping = { 'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume' }
+            df.rename(columns=column_mapping, inplace=True) # Attempt rename
+            missing_columns = [col for col in required_columns if col not in df.columns] # Check again
             if missing_columns:
-                self.console.print(f"[red]Still missing required columns: {', '.join(missing_columns)}[/red]")
+                self.console.print(f"[red]Error: Market data missing required columns: {', '.join(missing_columns)}[/red]")
                 return None
-
-        # Calculate all features using vectorbt with numba acceleration
-        self.console.print("[yellow]Calculating features using vectorbt with numba acceleration...[/yellow]")
-
-        # First, ensure data is properly formatted
-        df.index = pd.to_datetime(df.index) if df.index.dtype != 'datetime64[ns]' and 'date' not in df.columns else df.index
+        # --- Datetime Index ---
         if 'date' in df.columns and df.index.dtype != 'datetime64[ns]':
             try:
                 df['date'] = pd.to_datetime(df['date'])
                 df.set_index('date', inplace=True)
-            except:
-                pass  # Keep original index if conversion fails
-
-        # Calculate features with progress indicator
-        self.console.print("[yellow]Initializing vectorbt engine...[/yellow]")
-        df = calculate_all_features(df, selected_features=self._selected_features)
+            except Exception as date_err:
+                self.console.print(f"[yellow]Warning: Could not set datetime index: {date_err}[/yellow]")
+        elif df.index.dtype != 'datetime64[ns]':
+             try: df.index = pd.to_datetime(df.index)
+             except Exception as date_err:
+                 self.console.print(f"[yellow]Warning: Could not parse index as datetime: {date_err}[/yellow]")
+        # --- Calculate Features ---
+        self.console.print(f"[yellow]Calculating selected features ({', '.join(self._selected_features)})...[/yellow]")
+        df = calculate_all_features(df, selected_features=self._selected_features) # Pass selection
         self.console.print("[green]Features calculated successfully![/green]")
 
-        # Ask if user wants to generate synthetic trades with these features
-        generate_trades = questionary.confirm(
-            "Would you like to generate synthetic trades using these features?"
-        ).ask()
-
-        if generate_trades:
-            # Get agent name for the trades
-            agent_name = self.current_context.get('agent_name', 'unnamed_agent')
-
-            # Generate synthetic trades
-            # Call via self as it's bound in SwarmCLI
-            trades_path = self.generate_synthetic_trades_for_agent(agent_name, self._selected_features, market_data)
-
-
-            if trades_path:
-                # Ask if user wants to continue with feature selection or analyze trades
-                analyze_trades = questionary.confirm(
-                    "Would you like to analyze these trades now instead of continuing with feature selection?"
-                ).ask()
-
-                if analyze_trades:
-                    # Initialize analyzer with the generated trades
-                    analyzer = TradeAnalyzer()
-                    analyzer.load_trades(trades_path)
-                    self.trade_analyzer = analyzer # Store analyzer on self
-                    # Call via self as it's bound in SwarmCLI
-                    self.filter_trades_workflow() # Pass self if it needs CLI context
-                    return None # Exit this workflow as analysis workflow takes over
-
+    except FileNotFoundError:
+        self.console.print(f"[red]Error: Market data file not found at {market_data_path}[/red]")
+        return None
     except Exception as e:
         self.console.print(f"[red]Error loading market data or calculating features: {e}[/red]")
         import traceback
         self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
         return None
 
-    # 3. Interactive Trade Labeling with calculated features
-    # Call helper directly, passing self
-    labeled_trades = _label_trades_interactively(self, df, self._selected_features)
+    # 3. Generate Synthetic Trades (Mandatory for this workflow)
+    self.console.print("[yellow]Generating synthetic trades based on selected features to derive strategy parameters...[/yellow]")
+    # Get agent name (can be temporary for strategy creation)
+    agent_name = self.current_context.get('agent_name', f"strategy_gen_{pd.Timestamp.now().strftime('%H%M%S')}")
 
-    # Handle case where user backed out of labeling
-    if labeled_trades is None:
+    # Call the trade generation function (bound to self)
+    # This function asks for RR, SL, sizes etc. and saves the trades CSV
+    # Need access to generate_synthetic_trades_for_agent, assuming it exists via self
+    trades_path = self.generate_synthetic_trades_for_agent(agent_name, self._selected_features, market_data_path)
+
+    if not trades_path or not os.path.exists(trades_path):
+        self.console.print("[red]Synthetic trade generation failed or was cancelled. Cannot derive strategy parameters.[/red]")
         return None
 
-    # 4. Derive Strategy Parameters
-    # Call helper directly, passing self
-    strategy_params = _derive_strategy_parameters(self, labeled_trades)
+    self.console.print(f"[green]Synthetic trades generated and saved to: {trades_path}[/green]")
+    self._update_selection("Generated Trades CSV", os.path.basename(trades_path))
 
+    # 4. Derive Strategy Parameters from Generated Trades
+    try:
+        trades_df = pd.read_csv(trades_path)
+        if trades_df.empty:
+            self.console.print("[yellow]Generated trade file is empty. Using default parameters.[/yellow]")
+            strategy_params = {'derived_thresholds': {}, 'win_rate': 0.0} # Default empty params
+        else:
+            # Filter winning trades (simple PnL > 0 for now)
+            winning_trades = trades_df[trades_df['pnl_pct'] > 0].copy() # Use .copy()
+            if winning_trades.empty:
+                self.console.print("[yellow]No winning trades found in generated data. Using default parameters.[/yellow]")
+                strategy_params = {'derived_thresholds': {}, 'win_rate': 0.0} # Default empty params
+            else:
+                self.console.print(f"[green]Found {len(winning_trades)} winning trades. Deriving parameters...[/green]")
+                # Call the new helper function to derive parameters
+                # Pass self explicitly
+                strategy_params = _derive_params_from_synthetic_trades(self, winning_trades, self._selected_features)
+
+    except FileNotFoundError:
+         self.console.print(f"[red]Error: Could not find generated trades file: {trades_path}[/red]")
+         return None
+    except Exception as e:
+        self.console.print(f"[red]Error analyzing generated trades: {e}[/red]")
+        import traceback
+        self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        self.console.print("[yellow]Using default parameters due to error.[/yellow]")
+        strategy_params = {'derived_thresholds': {}, 'win_rate': 0.0} # Default empty params
+
+
+    # 5. Return results
     return {
         'features': self._selected_features,
-        'labeled_trades': labeled_trades,
-        'strategy_params': strategy_params
+        # 'labeled_trades': None, # No longer relevant
+        'strategy_params': strategy_params # Contains derived thresholds etc.
     }
 
-def _label_trades_interactively(self, df, features):
+
+def _derive_params_from_synthetic_trades(self, winning_trades_df, features):
     """
-    Interactive trade labeling interface
+    Derives potential strategy parameters from winning synthetic trades.
 
     Args:
-        df (pd.DataFrame): Market price data with calculated features
-        features (list): Selected features
+        self: The SwarmCLI instance (for accessing console, etc.)
+        winning_trades_df (pd.DataFrame): DataFrame of winning trades.
+        features (list): List of features selected by the user.
 
     Returns:
-        list: Labeled trades with contextual information
+        dict: Dictionary containing derived parameters (e.g., thresholds).
     """
-    labeled_trades = []
+    derived_params = {'derived_thresholds': {}, 'win_rate': 1.0} # Start with win_rate=1.0 for this subset
 
-    # Create a table to display feature values
-    table = Table(title="Feature Values")
-    table.add_column("Feature", style="cyan")
-    table.add_column("Value", style="green")
+    if winning_trades_df.empty:
+        return derived_params # Return defaults if no winning trades
 
-    # Display sample trades for labeling
-    for index, row in df.iterrows():
-        # Create a dictionary of trade details
-        trade_details = {
-            'date': row.get('date', str(index)),
-            'price': row.get('Close', row.get('close', 0)),
-            **{feature: row.get(feature, 'N/A') for feature in features}
-        }
+    self.console.print("[cyan]Calculating statistics for winning trade entries:[/cyan]")
+    param_table = Table(title="Derived Parameter Suggestions (Winning Trades)")
+    param_table.add_column("Feature (at Entry)", style="cyan")
+    param_table.add_column("Mean", style="green")
+    param_table.add_column("Median", style="green")
+    param_table.add_column("Std Dev", style="yellow")
 
-        # Display feature values in a table
-        self.console.print(f"[bold]Trade at {trade_details['date']} - Price: {trade_details['price']}[/bold]")
+    for feature in features:
+        entry_col = f'entry_{feature}' # Column name in trades_df
+        if entry_col in winning_trades_df.columns:
+            feature_values = winning_trades_df[entry_col].dropna()
+            if not feature_values.empty:
+                mean_val = feature_values.mean()
+                median_val = feature_values.median()
+                std_dev = feature_values.std()
 
-        # Clear previous rows before adding new ones
-        # Create a new table instance for each iteration to avoid state issues
-        current_table = Table(title="Feature Values")
-        current_table.add_column("Feature", style="cyan")
-        current_table.add_column("Value", style="green")
+                # Store derived thresholds (e.g., based on median)
+                derived_params['derived_thresholds'][feature] = {'median_entry': median_val, 'mean_entry': mean_val}
 
-
-        for feature in features:
-            if feature in row:
-                current_table.add_row(feature, str(round(row[feature], 4) if isinstance(row[feature], (int, float)) else row[feature]))
-
-        self.console.print(current_table)
-
-
-        # Add option to go back
-        choices = ["Good Trade", "Bad Trade", "Skip", "Back to Feature Selection"]
-        trade_choice = questionary.select(
-            f"Evaluate this trade:",
-            choices=choices
-        ).ask()
-
-        if trade_choice == "Back to Feature Selection":
-            return None
-        elif trade_choice == "Skip":
-            continue
+                param_table.add_row(
+                    feature,
+                    f"{mean_val:.4f}",
+                    f"{median_val:.4f}",
+                    f"{std_dev:.4f}"
+                )
+            else:
+                 param_table.add_row(feature, "N/A", "N/A", "N/A")
         else:
-            is_good_trade = trade_choice == "Good Trade"
-            labeled_trades.append({
-                'trade_details': trade_details,
-                'is_good_trade': is_good_trade
-            })
-
-    return labeled_trades
-
-def _derive_strategy_parameters(self, labeled_trades):
-    """
-    Derive strategy parameters from labeled trades
-
-    Args:
-        labeled_trades (list): Trades with labels
-
-    Returns:
-        dict: Derived strategy parameters
-    """
-    if not labeled_trades: # Handle case where no trades were labeled
-        return {
-            'profit_threshold': 0.0,
-            'stop_loss': 0.0,
-            'recommended_features': []
-        }
-
-    good_trades = [trade for trade in labeled_trades if trade['is_good_trade']]
-
-    # Calculate key metrics
-    win_rate = len(good_trades) / len(labeled_trades) if labeled_trades else 0
-    # Ensure price exists and is numeric before calculating mean/std
-    good_prices = [trade['trade_details']['price'] for trade in good_trades if isinstance(trade['trade_details'].get('price'), (int, float))]
-    avg_profit = np.mean(good_prices) if good_prices else 0
-    volatility = np.std(good_prices) if good_prices else 0
+             param_table.add_row(feature, "[dim]Not Recorded[/dim]", "[dim]Not Recorded[/dim]", "[dim]Not Recorded[/dim]")
 
 
-    metrics = {
-        'win_rate': win_rate,
-        'avg_profit': avg_profit,
-        'volatility': volatility
-    }
+    self.console.print(param_table)
+    self.console.print("[yellow]Note:[/yellow] These are simple statistics from winning trade entries.")
+    self.console.print("Use these as a starting point for refining agent parameters or rules.")
 
-    # Recommend strategy parameters
-    strategy_params = {
-        'profit_threshold': metrics['win_rate'], # Example: use win rate as profit threshold
-        'stop_loss': metrics['volatility'] * 0.5, # Example: use volatility for stop loss
-        'recommended_features': list(set(
-            feature for trade in good_trades
-            for feature in trade['trade_details'].keys()
-            if feature not in ['date', 'price']
-        ))
-    }
+    # Add overall stats for context
+    derived_params['avg_win_pnl'] = winning_trades_df['pnl_pct'].mean()
+    derived_params['median_win_pnl'] = winning_trades_df['pnl_pct'].median()
+    derived_params['avg_win_duration'] = winning_trades_df['duration'].mean()
 
-    return strategy_params
+    return derived_params
+
 
 def agent_management_menu(self):
     choices = [
@@ -922,33 +869,43 @@ def create_new_strategy_workflow(self, agent_name):
     # 2. Interactive Feature Selection and Trade Labeling
     # Call the function directly as it's in the same module
     # Pass 'self' explicitly because the function needs it to call other bound methods
-    strategy_config_details = _select_and_label_features(self, market_data_path)
+    # This function now generates trades and derives params automatically
+    strategy_config_details = _select_and_label_features(self, market_data_path) # Call helper directly
 
     if strategy_config_details is None:
-        return None # User likely backed out
+        return None # User likely backed out or process failed
 
     # 3. Extract Strategy Parameters
     features = strategy_config_details['features']
-    strategy_params = strategy_config_details['strategy_params']
+    # The derived parameters are now nested inside 'strategy_params'
+    strategy_params = strategy_config_details.get('strategy_params', {}) # Use .get for safety
 
     # 4. Generate Strategy Name
-    strategy_name = f"{agent_name}_strategy_{pd.Timestamp.now().strftime('%Y%m%d%H%M')}" # Add timestamp
+    timestamp = pd.Timestamp.now().strftime('%Y%m%d%H%M')
+    strategy_name = f"{agent_name}_strategy_{timestamp}"
 
     # 5. Save Strategy Configuration (Placeholder call)
+    # Pass the derived parameters dictionary
     # Need access to _save_strategy, assuming it exists via self
     self._save_strategy(
         strategy_name,
         market_data_path,
-        strategy_params.get('profit_threshold'), # Use .get for safety
-        strategy_params.get('stop_loss'),
-        features,
-        strategy_config_details.get('labeled_trades')
+        # Extract specific params if needed, or pass the whole dict
+        profit_threshold=strategy_params.get('avg_win_pnl', None), # Example: use avg win pnl?
+        stop_loss=None, # SL/TP were part of trade gen, not derived here
+        features=features,
+        # Pass the derived params dict for saving
+        derived_parameters=strategy_params.get('derived_thresholds', {})
     )
 
     # Store the selected features from this workflow on self if needed by caller
     self._selected_features = features
+    # Update context panel with derived params
+    self._update_selection("Strategy", strategy_name)
+    self._update_selection("Derived Params", strategy_params.get('derived_thresholds', {}))
 
-    return strategy_name
+
+    return strategy_name # Return the name of the created strategy
 
 def _list_existing_agents(self):
     """
