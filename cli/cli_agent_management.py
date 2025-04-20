@@ -377,31 +377,11 @@ def create_new_strategy_workflow(self, agent_name):
 
     # Use self._selected_features to store selection for the calling function (create_agent_workflow)
 
-    # --- Calculate default selection more robustly ---
-    desired_defaults = {'rsi', 'macd_hist', 'sma_20', 'ema_20'} # Use a set for faster lookup
-    # Iterate through available features and select those matching the desired defaults
-    default_selection = [feature for feature in available_features if feature in desired_defaults]
-    # --- End default calculation ---
-
-    # --- DEBUGGING PRINTS ---
-    print("\n--- DEBUG ---")
-    print(f"Available Features (Choices): {available_features}")
-    print(f"Calculated Default Selection: {default_selection}")
-    # Check if all defaults are actually in choices
-    all_defaults_in_choices = all(item in available_features for item in default_selection)
-    print(f"All Defaults in Choices?: {all_defaults_in_choices}")
-    print("--- END DEBUG ---\n")
-    # --- END DEBUGGING PRINTS ---
-
-    # Check if the default list is valid before passing it
-    if not all_defaults_in_choices:
-         self.console.print("[bold red]Error:[/bold red] Calculated default features are not valid choices. Resetting default.")
-         default_selection = None # Reset default if invalid to avoid crash
-
+    self.console.print("[yellow]Please select the features to associate with this agent.[/yellow]") # Add prompt guidance
     self._selected_features = questionary.checkbox(
          f"Select features to associate with agent '{agent_name}' (these will be recorded in generated trades):",
          choices=available_features,
-         default=default_selection # Use the robustly calculated (and potentially reset) default list
+         default=None # Set default to None to avoid the error
     ).ask()
     if not self._selected_features:
          self.console.print("[yellow]No features selected. Cannot create strategy base.[/yellow]")
