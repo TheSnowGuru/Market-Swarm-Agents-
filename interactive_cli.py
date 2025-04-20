@@ -106,7 +106,7 @@ except Exception as e:
 
 from utils.agent_config_manager import AgentConfigManager
 from shared.feature_extractor_vectorbt import get_available_features, calculate_all_features
-from utils.synthetic_trade_generator import SyntheticTradeGenerator
+# from utils.synthetic_trade_generator import SyntheticTradeGenerator # Moved to cli_trade_generation
 from utils.trade_analyzer import TradeAnalyzer
 
 # Import functions from cli.py - commented out until we verify they exist
@@ -121,6 +121,7 @@ from utils.trade_analyzer import TradeAnalyzer
 
 # Import the moved trade generation/viewing functions
 from cli import cli_trade_generation
+
 
 class SwarmCLI:
     def __init__(self):
@@ -503,6 +504,8 @@ class SwarmCLI:
 
     # --- Trade Generation/Viewing Methods Moved to cli/cli_trade_generation.py ---
 
+    # Method definition removed: generate_synthetic_trades_for_agent
+
     def trade_analysis_menu(self):
         """
         Menu for trade analysis
@@ -648,12 +651,8 @@ class SwarmCLI:
             import traceback
             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
             return None
-    
-    def generate_synthetic_trades_workflow(self):
-        """
-        Workflow for generating synthetic trades
-        """
-        # 1. Select market data
+
+    # Method definition removed: generate_synthetic_trades_workflow
         market_data_path = self._select_market_data()
         
         if market_data_path == 'back':
@@ -739,10 +738,8 @@ class SwarmCLI:
             import traceback
             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
             self.synthetic_trades_menu()
-    
-    def _configure_trade_conditions(self, condition_type):
-        """
-        Configure entry or exit conditions for trade generation
+
+    # Method definition removed: _configure_trade_conditions
         
         Args:
             condition_type (str): 'entry' or 'exit'
@@ -811,10 +808,8 @@ class SwarmCLI:
             self.console.print(f"[green]Added condition: {indicator} {operator} {threshold}[/green]")
         
         return conditions
-    
-    def _display_trade_statistics(self, stats):
-        """
-        Display trade statistics in a formatted table
+
+    # Method definition removed: _display_trade_statistics
         
         Args:
             stats (dict): Trade statistics
@@ -836,12 +831,8 @@ class SwarmCLI:
             table.add_row(key.replace('_', ' ').title(), formatted_value)
         
         self.console.print(table)
-    
-    def view_synthetic_trades(self):
-        """
-        View existing synthetic trade files
-        """
-        # Find CSV files in the synthetic trades directory
+
+    # Method definition removed: view_synthetic_trades
         trade_files = self._find_csv_files('data/synthetic_trades')
         
         if not trade_files:
@@ -942,10 +933,8 @@ class SwarmCLI:
         except Exception as e:
             self.console.print(f"[red]Error viewing trade file: {e}[/red]")
             return self.synthetic_trades_menu()
-    
-    def configure_trade_generation(self):
-        """
-        Configure default parameters for trade generation
+
+    # Method definition removed: configure_trade_generation
         """
         # Default configuration
         default_config = {
@@ -1027,9 +1016,11 @@ class SwarmCLI:
         # Update configuration
         config[param] = new_value
         self.console.print(f"[green]Updated {param} to {new_value}[/green]")
-        
+
     # --- Trade Generation/Viewing Methods Moved to cli/cli_trade_generation.py ---
-        
+
+    # Method definition removed: generate_trades_for_agent_workflow
+
     def trade_analysis_menu(self):
         """
         Menu for trade analysis
