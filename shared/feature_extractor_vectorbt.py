@@ -177,53 +177,65 @@ def get_available_features() -> list:
     ]
 
 
-# Add selected_features argument
 def calculate_all_features(data: pd.DataFrame, selected_features: list = None) -> pd.DataFrame:
     """
-    Calculate selected or all available features for the given data
+    Calculate selected or all available features for the given data.
 
     Args:
-        data (pd.DataFrame): Input price data
+        data (pd.DataFrame): Input price data.
         selected_features (list, optional): List of features to calculate.
-                                            If None, calculates all implemented.
+                                            If None, calculates all implemented features.
 
     Returns:
-        pd.DataFrame: DataFrame with calculated features
+        pd.DataFrame: Original DataFrame merged with calculated features.
     """
+    if data is None or data.empty:
+        print("Warning: Input data is empty in calculate_all_features.")
+        return pd.DataFrame() # Return empty if input is empty
+
+    # Start with a copy of the original data to preserve it
+    results_df = data.copy()
+    initial_columns = set(results_df.columns) # Store original columns
+
     try:
-        # Start with a copy of the original data
-        df = data.copy()
+        # Calculate selected percentage changes
+        # These functions now return ONLY the calculated columns
+        df_pct = calculate_percentage_changes(results_df, selected_features)
 
-        # Calculate percentage changes (passing selection)
-        df_pct = calculate_percentage_changes(df, selected_features)
-        # Merge calculated pct changes back, keeping original columns
-        # Use concat instead of merge for better performance and index handling
-        df = pd.concat([df, df_pct], axis=1)
+        # Calculate selected vectorbt indicators
+        # Pass the original data frame copy for calculation consistency
+        df_ind = calculate_vectorbt_indicators(results_df, selected_features)
 
+        # Concatenate results - will handle non-overlapping columns correctly
+        # Only concat if the resulting dataframes are not empty
+        dfs_to_concat = [results_df]
+        if not df_pct.empty:
+            dfs_to_concat.append(df_pct)
+        if not df_ind.empty:
+            dfs_to_concat.append(df_ind)
 
-        # Calculate vectorbt indicators (passing selection)
-        df_ind = calculate_vectorbt_indicators(df, selected_features)
-        # Merge calculated indicators back, keeping original columns
-        # Use concat instead of merge
-        df = pd.concat([df, df_ind], axis=1)
+        # Use concat which aligns on index
+        results_df = pd.concat(dfs_to_concat, axis=1)
 
+        # Identify newly added columns
+        added_cols = [col for col in results_df.columns if col not in initial_columns]
 
-        # Fill NaN values that might be created during calculations
-        # Consider a more robust fill method if 0 is inappropriate (e.g., ffill, bfill)
-        df.ffill(inplace=True) # Forward fill first (using recommended method)
-        df.fillna(0, inplace=True) # Fill remaining NaNs (e.g., at the beginning)
+        # Fill NaN values ONLY in the newly added columns
+        if added_cols:
+            results_df[added_cols] = results_df[added_cols].ffill() # Forward fill first
+            results_df[added_cols] = results_df[added_cols].fillna(0) # Fill remaining NaNs
 
+        # Ensure column order (optional, but can be nice) - originals first, then added
+        final_ordered_cols = list(data.columns) + sorted([col for col in added_cols if col in results_df.columns])
+        # Handle potential duplicates if original columns had same name as features (unlikely now)
+        final_ordered_cols = list(dict.fromkeys(final_ordered_cols))
+        results_df = results_df[final_ordered_cols]
 
-        # Ensure only requested features (plus original columns) are returned
-        if selected_features is not None:
-            original_cols = list(data.columns)
-            final_cols = original_cols + [col for col in selected_features if col in df.columns and col not in original_cols]
-            # Handle potential duplicate columns if original data had feature names
-            final_cols = list(dict.fromkeys(final_cols)) # Preserve order, remove duplicates
-            df = df[final_cols]
+        return results_df
 
-        return df
     except Exception as e:
         print(f"Error in calculate_all_features: {e}")
-        # Return original data if calculation fails
-        return data.copy() # Return a copy to avoid modifying original on error
+        import traceback
+        print(traceback.format_exc()) # Print full traceback for debugging
+        # Return the original data copy if calculation fails
+        return data.copy()
