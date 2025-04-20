@@ -109,6 +109,7 @@ except Exception as e:
 from cli.cli_agent_management import (
     manage_agents_menu,
     create_agent_workflow,
+    create_new_strategy_workflow, # <-- ADDED
     edit_agent_workflow,
     train_agent_interactive,
     test_agent,
@@ -164,6 +165,7 @@ class SwarmCLI:
         # Agent Management
         self.manage_agents_menu = manage_agents_menu.__get__(self)
         self.create_agent_workflow = create_agent_workflow.__get__(self)
+        self.create_new_strategy_workflow = create_new_strategy_workflow.__get__(self) # <-- ADDED
         self.edit_agent_workflow = edit_agent_workflow.__get__(self)
         self.train_agent_interactive = train_agent_interactive.__get__(self)
         self.test_agent = test_agent.__get__(self)
