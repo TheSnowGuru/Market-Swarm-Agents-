@@ -1105,7 +1105,7 @@ def edit_agent_workflow(self):
                  # Prompt to update feature params if features changed
                  if questionary.confirm("Strategy/Features changed. Update feature parameters now?").ask():
                       # Call feature param editing logic here
-                      agent_config['feature_params'] = self._edit_feature_params(agent_config.get('features', []), agent_config.get('feature_params', {}))
+                      agent_config['feature_params'] = self._edit_feature_params(agent_config.get('features', []), agent_config.get('feature_params', {})) # ADD self.
                       self._update_selection("Feature Params", agent_config['feature_params'])
 
          elif strategy_action == "Assign Default Strategy":
@@ -1133,13 +1133,13 @@ def edit_agent_workflow(self):
              # Prompt to update feature params if features changed
              if questionary.confirm("Features changed. Update feature parameters now?").ask():
                   # Call feature param editing logic
-                  agent_config['feature_params'] = self._edit_feature_params(agent_config.get('features', []), agent_config.get('feature_params', {}))
+                  agent_config['feature_params'] = self._edit_feature_params(agent_config.get('features', []), agent_config.get('feature_params', {})) # ADD self.
                   self._update_selection("Feature Params", agent_config['feature_params'])
 
 
     elif edit_action == "Feature Parameters":
          if 'features' in agent_config and agent_config['features']:
-              agent_config['feature_params'] = self._edit_feature_params(agent_config.get('features', []), agent_config.get('feature_params', {}))
+              agent_config['feature_params'] = self._edit_feature_params(agent_config.get('features', []), agent_config.get('feature_params', {})) # ADD self.
               self._update_selection("Feature Params", agent_config['feature_params'])
               config_changed = True # Mark config as changed
          else:
