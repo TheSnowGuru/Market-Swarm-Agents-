@@ -306,31 +306,29 @@ class SwarmCLI:
             sys.exit(0)
 
     def _validate_float(self, value, min_val=-np.inf, max_val=np.inf, param_type=None): # Allow wider range by default
+        """Validator for questionary prompts requiring float input."""
         # Allow 'back' keyword
         if isinstance(value, str) and value.lower() == 'back':
              return True
         # Allow empty string for optional inputs like max_duration
         if isinstance(value, str) and value == '':
-             # Check if this parameter type allows empty string
-             if param_type == 'max_duration': return True
+             if param_type == 'max_duration':
+                 return True
              else:
-                  # self.console.print("[red]Input cannot be empty.[/red]") # Maybe allow empty for others too?
-                  # Let the float conversion handle empty string error
-                  pass
+                 # Return error string if empty is not allowed
+                 return "Input cannot be empty."
 
         try:
             float_val = float(value)
+            # Check bounds (inclusive)
             if not (min_val <= float_val <= max_val):
-                 self.console.print(f"[red]Value must be between {min_val} and {max_val}.[/red]")
-                 return False
+                 # Return the error message string directly
+                 return f"Value must be between {min_val} and {max_val}."
+            # Input is valid
             return True
         except ValueError:
-            # Provide specific message if empty string caused error and wasn't allowed
-            if value == '' and param_type != 'max_duration':
-                 self.console.print("[red]Input cannot be empty.[/red]")
-            else:
-                 self.console.print("[red]Invalid input. Please enter a numeric value or 'back'.[/red]")
-            return False
+            # Return error string for non-numeric input
+            return "Invalid input. Please enter a numeric value or 'back'."
 
     def _reset_context(self, keep_keys=None):
         """Reset context - less relevant now, workflows manage their state"""
