@@ -55,43 +55,46 @@ def calculate_vectorbt_indicators(data: pd.DataFrame) -> pd.DataFrame:
     """
     # Make a copy to avoid modifying the original
     df = data.copy()
-    
-    # Convert to proper vectorbt Series for numba acceleration
-    close = vbt.pd_accessor.PandasDFAccessor(df)['Close']
-    high = vbt.pd_accessor.PandasDFAccessor(df)['High'] if 'High' in df.columns else None
-    low = vbt.pd_accessor.PandasDFAccessor(df)['Low'] if 'Low' in df.columns else None
-    volume = vbt.pd_accessor.PandasDFAccessor(df)['Volume'] if 'Volume' in df.columns else None
-    
+
+    # --- Accessor lines removed ---
+    # Use DataFrame columns directly
+    close = df['Close']
+    high = df['High'] if 'High' in df.columns else None
+    low = df['Low'] if 'Low' in df.columns else None
+    volume = df['Volume'] if 'Volume' in df.columns else None
+
     # Calculate RSI
+    # Pass the pandas Series directly
     rsi = vbt.RSI.run(close, window=14).rsi
-    df['rsi'] = rsi.values
-    
+    df['rsi'] = rsi.values # Assign .values to avoid index issues if lengths differ slightly
+
     # Calculate MACD
     macd = vbt.MACD.run(close)
     df['macd'] = macd.macd.values
     df['macd_signal'] = macd.signal.values
     df['macd_hist'] = macd.hist.values
-    
+
     # Calculate Bollinger Bands
     bb = vbt.BollingerBands.run(close)
     df['bb_middle'] = bb.middle.values
     df['bb_upper'] = bb.upper.values
     df['bb_lower'] = bb.lower.values
     df['bb_percent_b'] = bb.percent_b.values
-    
+    df['bb_percent_b'] = bb.percent_b.values
+
     # Calculate Moving Averages
     df['sma_20'] = vbt.MA.run(close, window=20, short_name='sma').ma.values
     df['ema_20'] = vbt.MA.run(close, window=20, short_name='ema', ewm=True).ma.values
-    
+
     # Calculate ATR if high and low are available
     if high is not None and low is not None:
         atr = vbt.ATR.run(high, low, close)
         df['atr'] = atr.atr.values
-    
+
     # Calculate OBV if volume is available
     if volume is not None:
         df['obv'] = vbt.OBV.run(close, volume).obv.values
-    
+
     return df
 
 def get_available_features() -> list:
