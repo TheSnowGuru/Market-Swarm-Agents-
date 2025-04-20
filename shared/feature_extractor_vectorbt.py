@@ -18,33 +18,6 @@ except Exception as e:
     print(f"[yellow]Warning: Could not configure vectorbt settings: {e}[/yellow]")
 
 
-def calculate_percentage_changes(data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate various percentage changes for price data
-    
-    Args:
-        data (pd.DataFrame): Input price data with 'Close' column
-        
-    Returns:
-        pd.DataFrame: DataFrame with percentage change features
-    """
-    if 'Close' not in data.columns:
-        raise ValueError("DataFrame must contain 'Close' column")
-    
-    # Make a copy to avoid modifying the original
-    df = data.copy()
-    
-    # Calculate percentage changes at different timeframes
-    df['pct_change'] = df['Close'].pct_change() * 100
-    df['daily_pct_change'] = df['Close'].pct_change(periods=1) * 100 # Assumes daily or is just 1-period change
-    df['weekly_pct_change'] = df['Close'].pct_change(periods=7) * 100 # Assumes daily data for weekly change
-    # --- Add comments for frequency assumption ---
-    df['4h_pct_change'] = df['Close'].pct_change(periods=4) * 100  # WARNING: Assumes input data frequency allows 4-period lookback (e.g., 1H data for 4H change)
-    df['1h_pct_change'] = df['Close'].pct_change(periods=1) * 100  # WARNING: Assumes input data frequency allows 1-period lookback (e.g., 1H data for 1H change)
-
-    return df
-
-
 # Add selected_features argument
 def calculate_percentage_changes(data: pd.DataFrame, selected_features: list = None) -> pd.DataFrame:
     """

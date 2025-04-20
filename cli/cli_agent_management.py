@@ -259,7 +259,7 @@ def _select_and_label_features(self, market_data):
 
         # Calculate features with progress indicator
         self.console.print("[yellow]Initializing vectorbt engine...[/yellow]")
-        df = calculate_all_features(df)
+        df = calculate_all_features(df, selected_features=self._selected_features)
         self.console.print("[green]Features calculated successfully![/green]")
 
         # Ask if user wants to generate synthetic trades with these features
@@ -748,7 +748,7 @@ def create_agent_workflow(self):
                 # Calculate ALL features needed for conditions and analysis
                 # This assumes calculate_all_features is imported and available
                 self.console.print("[yellow]Calculating features for trade generation...[/yellow]")
-                df = calculate_all_features(df)
+                df = calculate_all_features(df, selected_features=features)
                 self.console.print("[green]Features calculated.[/green]")
 
 
