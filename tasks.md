@@ -1,131 +1,131 @@
-### Task List for Developer
+### ✅ Task List 
 
-- [x] **1. User Input Setup and interface**  
-  - Build a CLI to collect and control the strategy and agents:  
-    - Asset (e.g., BTC/USD, AAPL)  
-    - Timeframe (e.g., 1m, 5m, 1h)  
-    - Indicators (e.g., EMA, RSI)  
-    - Extra parameters (e.g., volatility, volume zones)
+- [x] **1. User Input Setup and Interface**  
+  - [x] Build a CLI to collect and control the strategy and agents:  
+    - [x] load Asset csv from datafolder (e.g., BTC/USD, AAPL)  
+    - [x] Select the Timeframe (e.g., 1m, 5m, 1h)  
+    - [x] Select Indicators (e.g., EMA, RSI)  
+    - [x] Add Extra parameters (e.g., volatility, volume zones)
+    
 
 - [ ] **2. Synthetic Data Creation**  
-  - Load historical data for the asset/timeframe  
-  - Calculate chosen indicators of the agent in order to create a strategy 
-  - Generate synthetic trades (Buy/Sell trades , loop at each bar, SL/TP, results, indicator values at trade entry and exit)  
-  - use numba by vectorbt for fast processing of data.
-  Generate Synthetic Trades
+  - [x] Load historical data for the asset/timeframe  
+  - [ ] Calculate and save new df for chosen indicators of the agent to create a the data set  .
+  - [ ] Generate synthetic trades data df (Buy/Sell, loop at each bar buy/sell order,with SL/TP, results, indicator values at entry and exit)  
+  - [ ] Use `numba` with `vectorbt` for fast processing  
+  - [ ] save the entry price, signal type,  
+  - [ ] Apply SL/TP with configurable RR  
+  - [ ] Track trade exit and save winning trades in CSV  
+  - [ ] Set default trade value of 100,000 account with 10,000 per each trade for the simulation. can be changed.
+  - [ ] Record indicator values at trade entry/exit  
+  - [ ] Compute trade metrics (PnL %, duration, volatility context, feature set)
 
-Loop through each candle/bar to simulate trades:
+- [ ] **3. Analze and Filter Profitable Trades**  
+  - [ ] Load synthetic trade data  
+  - [ ] Filter trades by RR threshold set in CLI  
+  - [ ] Save only profitable trades in new df with the filtered thrshold per agent per strategy. 
+  - [ ] Be able to add remove df for agent
+  - [ ] Group df by PnL %, duration, drawdwon,  
 
-For each trade:
+- [ ] **4. Generating Optimal Trading Rules**  
+  - [ ] Analyze filtered trades with plot using vectorbt 
+  - [ ] Save rules as strategy profiles  
+  - [ ] Explore decision trees or ML-based rule generation
+  - [ ] Make simple "if-then" rules (e.g., "If RSI < 30 and EMA rises, Buy")  
 
-Determine entry price, buy sell signal, Apply Stop-Loss (SL) and Take-Profit (TP) targets (fixed or dynamic) and also have a parameter for called RR, which is the ratio between tp/sl and this can be played with during the cli setup to create the syntetic data. 
-
-Track trade exit based on SL/TP hit , save only winning trades in a csv.
-
-Record indicator values at entry and exit (for strategy training) all data should be saved, indicators, and time
-
-Compute trade metrics (PnL %, duration, volatility context, feature ) 
-
-
-- [ ] **3. Filter Profitable Trades**  
-  - from the synthtic trade data we will save a df of winning trade only according to RR threshold that we set in the cli
-  - Filter trades that meet profitability goal of RR 
-  - Group by  (PnL %, duration, volatility context, feature ) 
-
-- [ ] **4. generating optimal Trading Rules**  
-  - Analyze filtered trades  
-  - Make simple "if-then" rules (e.g., "If RSI < 30 and EMA rises, Buy")  
-  - Save rules as a strategy profile
-  - find better way to generate a strategy using decision trees or machine learning algofeatur
-
-- [ ] **5. Run Backtest of the generated strategy**  
-  - Use vectorbt to test the strategy  and see a plot
-  - Show results: win rate, Sharpe ratio, PnL curve, drawdown
+- [ ] **5. Run Backtest of the Generated Strategy**  
+  - [ ] Use vectorbt for backtest  
+  - [ ] Display win rate, Sharpe ratio, PnL curve, drawdown
 
 - [ ] **6. Connect to Master Agent**  
-  - Send Strategy ID, backtest results, and trade summary to Master Agent  
-  - Allow Master Agent to track and adjust agent performance# SWARM Trading System Tasks
+  - [ ] Send strategy ID, results, trade summary  
+  - [ ] Enable master agent to track & adjust agent performance
 
-## Core Development Tasks
+---
+
+## ✅ Core Development Tasks
 
 ### Data Processing
-- [x] Implement data loading from CSV files
-- [x] Add support for different timeframes
-- [x] Create feature extraction pipeline
-- [x] Implement vectorbt indicators with numba acceleration
-- [ ] Add support for custom indicators creattion by vectorbt IndicatorFactory class(not now)
-- [ ] Implement data normalization techniques
+- [x] [x] Implement data loading from CSV files  
+- [x] Add support for different timeframes  
+- [x] [x] Create feature extraction pipeline  
+- [x] [x] Implement vectorbt indicators with numba acceleration  
+- [ ] [ ] Add support for custom indicators via `IndicatorFactory`  
+- [ ] [ ] Implement data normalization techniques
 
 ### Agent Development
-- [x] Create base agent architecture
-- [x] Implement ScalperAgent
-- [x] Implement OptimalTradeAgent
-- [ ] Implement TrendFollowerAgent
-- [ ] Implement CorrelationAgent
-- [ ] Create agent communication protocol
+- [x] Create base agent architecture  
+- [x] Implement `ScalperAgent`  
+- [x] Implement `OptimalTradeAgent`  
+- [ ] Implement `TrendFollowerAgent`  
+- [ ] Implement `CorrelationAgent`  
+- [ ] Create agent communication protocol  
 - [ ] Implement agent performance tracking
 
 ### Strategy Development
-- [x] Create strategy configuration system
-- [x] Implement basic strategy templates
-- [ ] Add machine learning-based strategy generation
-- [ ] Implement strategy optimization
-- [ ] Create strategy validation framework
+- [x] Create strategy configuration system  
+- [x] Implement basic strategy templates  
+- [ ] Add ML-based strategy generation  
+- [ ] Implement strategy optimization  
+- [ ] Create strategy validation framework  
 - [ ] Add strategy comparison tools
 
 ### Backtesting
-- [x] Implement basic backtesting functionality
-- [x] Add performance metrics calculation
-- [ ] Create visual backtest reports
-- [ ] Implement walk-forward testing
-- [ ] Add Monte Carlo simulation
+- [x] Implement basic backtesting functionality  
+- [x] Add performance metrics calculation  
+- [ ] Create visual backtest reports  
+- [ ] Implement walk-forward testing  
+- [ ] Add Monte Carlo simulation  
 - [ ] Create benchmark comparison tools
 
 ### User Interface
-- [x] Implement interactive CLI
-- [x] Add feature selection interface
-- [x] Create agent management system
-- [ ] Improve error handling and user feedback
-- [ ] Add data visualization tools
+- [x] Implement interactive CLI  
+- [x] Add feature selection interface  
+- [x] Create agent management system  
+- [ ] Improve error handling and user feedback  
+- [ ] Add data visualization tools  
 - [ ] Create web-based dashboard (optional)
 
-## Next Sprint Tasks
+---
+
+## 🔄 Next Sprint Tasks
 
 ### User Input Enhancements
-- [ ] Build advanced CLI to collect:
-  - Asset selection (e.g., BTC/USD, AAPL)
-  - Timeframe selection (e.g., 1m, 5m, 1h)
-  - Indicator selection with parameters
-  - Extra parameters (e.g., volatility, volume zones)
+- [ ] Build advanced CLI:
+  [ ] Asset selection (e.g., BTC/USD, AAPL)  
+  [ ] Timeframe selection (e.g., 1m, 5m, 1h)  
+  [ ] Indicator selection with parameters  
+  [ ] Extra parameters (e.g., volatility, volume zones)
 
 ### Synthetic Data Creation
-- [x] Load historical data for the asset/timeframe
-- [x] Calculate chosen indicators
-- [x] Generate synthetic trades (Buy/Sell, SL/TP, results)
-- [x] Optimize with numba/vectorbt for fast processing
+- [x] Load historical data  
+- [x] Calculate indicators  
+- [x] Generate synthetic trades (SL/TP logic)  
+- [x] Optimize with numba/vectorbt  
 
 ### Trade Analysis
-- [x] Filter trades that meet profitability goals
-- [x] Group by patterns or conditions
-- [x] Analyze trade characteristics
+- [x] Filter trades that meet RR threshold  
+- [x] Group by patterns/conditions  
+- [x] Analyze trade characteristics  
 - [x] Create trade classification system
 
 ### Strategy Generation
-- [ ] Analyze filtered trades
-- [ ] Create rule-based strategies
-- [ ] Implement decision tree for strategy generation
-- [ ] Add machine learning models for strategy optimization
-- [ ] Save strategies as reusable profiles
+- [ ] Analyze filtered trades  
+- [ ] Create rule-based strategies  
+- [ ] Implement decision tree strategy generation  
+- [ ] Add ML-based strategy optimization  
+- [ ] Save reusable strategy profiles
 
 ### Advanced Backtesting
-- [ ] Use vectorbt for comprehensive testing
-- [ ] Show detailed results (win rate, Sharpe ratio, etc.)
-- [ ] Implement portfolio-level backtesting
+- [ ] Use vectorbt for full testing  
+- [ ] Show win rate, Sharpe ratio, PnL, drawdown  
+- [ ] Implement portfolio-level backtesting  
 - [ ] Add risk management analysis
 
 ### Multi-Agent System
-- [ ] Connect strategies to Master Agent
-- [ ] Implement agent performance tracking
-- [ ] Create agent coordination system
-- [ ] Add adaptive strategy selection
-- [ ] Implement reinforcement learning for agent improvement
+- [ ] Connect strategies to Master Agent  
+- [ ] Track agent performance  
+- [ ] Implement coordination protocol  
+- [ ] Adaptive strategy selection  
+- [ ] Reinforcement learning for agent improvement
+
