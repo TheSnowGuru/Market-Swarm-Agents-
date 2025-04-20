@@ -336,63 +336,93 @@ class SwarmCLI:
     # --- Trade Analysis Methods Moved to cli/cli_trade_analysis.py ---
 
     def _display_selections_panel(self):
-        """
-        Displays current selections in a panel.
-        """
+        """Displays current selections in a panel."""
         if not self.current_selections:
+            # Optionally print an empty panel or nothing
+            # self.console.print(Panel("", title="[bold]Current Selections[/bold]", border_style="dim blue", width=min(40, self.display_width // 3)), justify="right")
             return
-        
-        # Calculate panel width - use about 1/3 of the terminal width
-        panel_width = min(40, self.display_width // 3)
-        
-        # Create a table for the selections
-        table = Table(box=None, padding=0, expand=False, width=panel_width)
-        table.add_column("Parameter", style="cyan", width=panel_width // 2)
-        table.add_column("Value", style="green", width=panel_width // 2)
-        
-        # Add rows for each selection
-        for key, value in self.current_selections.items():
+
+        panel_width = min(45, self.display_width // 3) # Slightly wider panel
+        table = Table(box=None, padding=(0, 1), expand=False, width=panel_width, show_header=False)
+        table.add_column("Parameter", style="cyan", width=panel_width * 2 // 5, overflow="fold") # Adjust column ratio
+        table.add_column("Value", style="green", width=panel_width * 3 // 5, overflow="fold")
+
+        # Sort selections alphabetically for consistent display
+        sorted_selections = sorted(self.current_selections.items())
+
+        for key, value in sorted_selections:
             if isinstance(value, list):
-                value_str = ", ".join(value) if len(value) <= 3 else f"{len(value)} items"
+                # Join list items, limit total length
+                value_str = ", ".join(map(str, value))
+                max_len = 100 # Limit display length for lists
+                if len(value_str) > max_len:
+                     value_str = value_str[:max_len-3] + "..."
             elif isinstance(value, dict):
-                value_str = f"{len(value)} parameters"
+                value_str = f"{len(value)} params"
             else:
                 value_str = str(value)
-            
-            # Truncate long values
-            if len(value_str) > panel_width // 2 - 2:
-                value_str = value_str[:panel_width // 2 - 5] + "..."
-                
+
+            # Simple truncation (panel handles overflow better now)
+            # max_val_len = panel_width * 3 // 5 - 1
+            # if len(value_str) > max_val_len:
+            #     value_str = value_str[:max_val_len - 3] + "..."
+
             table.add_row(key.replace('_', ' ').title(), value_str)
-        
-        # Create a panel with the table
+
         panel = Panel(
             table,
-            title="[bold]Current Selections[/bold]",
+            title="[bold]Selections[/bold]",
             border_style="blue",
             width=panel_width
         )
-        
-        # Print the panel to the right side of the terminal
-        self.console.print(panel, justify="right")
-    
+        # Printing to the right doesn't work reliably without more complex layout managers.
+        # Print normally for now.
+        self.console.print(panel)
+
+
     def _update_selection(self, key, value):
-        """
-        Update the current selections and display the panel
-        
+        """Updates the current selections dictionary."""
+        if value is None or (isinstance(value, str) and value.strip() == ''): # Don't store empty selections
+             if key in self.current_selections:
+                  del self.current_selections[key]
+        else:
+             self.current_selections[key] = value
+        # Display is handled separately, e.g., in main_menu or workflow starts
+
+    def _clear_selections(self):
+        """Clears the current selections."""
+        self.current_selections = {}
+        # Optionally update the display if it's persistent
+        # self._display_selections_panel()
+
+
     # --- Agent Management Methods Moved to cli/cli_agent_management.py ---
     # (Methods like manage_agents_menu, create_agent_workflow etc. are bound in __init__)
 
     def run(self):
         try:
             while True:
+                self._clear_selections() # Clear selections at the start of each main menu loop
                 self.main_menu()
-        except (KeyboardInterrupt, EOFError):  # EOFError is triggered by Ctrl+D
+        except (KeyboardInterrupt, EOFError):
             self.console.print("\n[yellow]Exiting SWARM Trading System...[/yellow]")
             sys.exit(0)
+        except Exception as e:
+             self.console.print(f"\n[bold red]An unexpected error occurred:[/bold red]")
+             self.console.print_exception(show_locals=False) # Print traceback
+             self.logger.exception("CLI Error") # Log the exception
+             # Attempt to return to main menu after error
+             try:
+                 questionary.text("An error occurred. Press Enter to attempt to return to the main menu...").ask()
+                 self.run() # Recursive call might be risky, but simple recovery
+             except Exception as recovery_e:
+                  self.console.print(f"[red]Recovery failed: {recovery_e}. Exiting.[/red]")
+                  sys.exit(1)
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    # Call setup_logging here if you want logging configured globally
+    # setup_logging() # Uncomment if needed
+    logging.basicConfig(level=logging.INFO) # Keep basic config for now
     try:
         cli = SwarmCLI()
         cli.run()
