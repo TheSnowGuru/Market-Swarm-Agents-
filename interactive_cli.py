@@ -67,7 +67,6 @@ try:
     questionary.checkbox = checkbox_wrapper
     questionary.text = text_wrapper
     questionary.confirm = confirm_wrapper
-    print("[dim]Questionary imported and patched for EOF handling.[/dim]")
 
 
 except ImportError as e:
