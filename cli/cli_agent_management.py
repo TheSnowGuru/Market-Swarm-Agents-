@@ -644,42 +644,6 @@ def edit_agent_workflow(self):
     return self.edit_agent_workflow()
 
 
-# Helper function for editing feature parameters within edit_agent_workflow
-def _edit_feature_params(self, features, current_params):
-     """Interactively edit parameters for a list of features."""
-     new_params = current_params.copy() # Start with existing params
-
-     for feature in features:
-          # Determine param type and default based on feature name (example)
-          param_type = 'window' if any(x in feature.lower() for x in ['sma', 'ema', 'rsi', 'macd', 'atr', 'bb']) else 'threshold'
-          default_val_dict = new_params.get(feature, {})
-          default_val = default_val_dict.get(param_type, "14" if 'rsi' in feature.lower() else "20") # Example defaults
-
-          is_valid_input = lambda x: (x.isdigit() and int(x) > 0) if param_type == 'window' else self._validate_float(x)
-
-          param_value = questionary.text(
-              f"Enter {param_type} for {feature} (current: {default_val}, or 'back' to skip):",
-              validate=lambda x: (is_valid_input(x)) or x.lower() == 'back',
-              default=str(default_val)
-          ).ask()
-
-          if param_value is None: raise KeyboardInterrupt
-          elif param_value.lower() == 'back':
-               continue # Skip to next feature
-
-          # Update the parameter if valid
-          try:
-               typed_value = int(param_value) if param_type == 'window' else float(param_value)
-               if feature not in new_params:
-                    new_params[feature] = {}
-               new_params[feature][param_type] = typed_value
-               self._update_selection(f"{feature} {param_type.title()}", typed_value)
-          except ValueError:
-               self.console.print(f"[red]Invalid numeric value entered for {feature}. Keeping previous value.[/red]")
-
-     return new_params
-
-
 def train_agent_interactive(self):
     # 1. Select Agent to Train
     agents_with_options = self._list_existing_agents() # Assuming this exists via self
@@ -1067,85 +1031,6 @@ def _display_agent_config_summary(self, agent_config):
               table.add_row(title, value_str)
 
     self.console.print(table)
-    # Filter out non-agent options for training selection
-    agent_choices = [agent for agent in agents_with_options if agent not in ['Create New Agent', 'Back']]
-    if not agent_choices:
-         self.console.print("[yellow]No agents available to train. Create an agent first.[/yellow]")
-         return self.manage_agents_menu() # Or agent_management_menu?
-
-    # Continue with the correct logic for train_agent_interactive
-    agent_choices.append('Back')
-    selected_agent = questionary.select(
-        "Select agent to train:",
-        choices=agent_choices
-    ).ask()
-
-    if selected_agent == 'Back':
-        return self.manage_agents_menu() # Or agent_management_menu?
-    elif selected_agent is None: # Handle Ctrl+C/EOF
-         raise KeyboardInterrupt
-
-    # 2. Load Agent Config (to get type, strategy, etc.)
-    config_manager = AgentConfigManager()
-    agent_config = config_manager.load_agent_config(selected_agent)
-    if not agent_config:
-         self.console.print(f"[red]Could not load configuration for agent: {selected_agent}[/red]")
-         return self.train_agent_interactive() # Retry selection
-
-    agent_type = agent_config.get('agent_type', 'unknown')
-    strategy = agent_config.get('strategy', 'unknown')
-
-    # 3. Select Training Data (Optional - could use data from config)
-    use_config_data = False
-    config_data_path = agent_config.get('market_data') # Get path from config if exists
-    if config_data_path and os.path.exists(config_data_path):
-         use_config_data = questionary.confirm(f"Use market data from config ({config_data_path})?").ask()
-         if use_config_data is None: raise KeyboardInterrupt
-
-
-    if use_config_data:
-         data_path = config_data_path
-    else:
-         # Need access to _select_market_data, assuming it exists via self
-         data_path = self._select_market_data()
-         if data_path == 'back' or data_path == 'cancel' or data_path is None:
-              return self.train_agent_interactive() # Go back to agent selection
-
-    # 4. Specify Model Output Path (Optional)
-    default_model_path = config_manager.get_model_path(selected_agent) # Get default path
-    output_path = questionary.text(
-        "Enter model output path (leave blank for default):",
-        default="" # Start blank, show default implicitly via save_model later
-    ).ask()
-    if output_path is None: raise KeyboardInterrupt
-
-
-    # Use default if blank was entered
-    if not output_path:
-         output_path = default_model_path
-         self.console.print(f"[dim]Using default model path: {output_path}[/dim]")
-
-
-    # 5. Run Training (Placeholder)
-    self.console.print(f"[bold]Training agent '{selected_agent}' ({agent_type}) with strategy '{strategy}'[/bold]")
-    self.console.print(f"Using data: {data_path}")
-    self.console.print(f"Saving model to: {output_path}")
-
-    # Need access to train_agent, assuming it exists via self
-    trained_model = self.train_agent(selected_agent, agent_type, strategy)
-
-    # 6. Save Model
-    # Pass the explicit path to save_model
-    saved_path = config_manager.save_model(selected_agent, trained_model, model_path=output_path)
-
-
-    if saved_path:
-        self.console.print(f"[green]Training complete. Model saved to: {saved_path}[/green]")
-    else:
-        self.console.print("[yellow]Training complete. Model saving skipped (placeholder training or error).[/yellow]")
-
-    # Go back to the agent management menu
-    return self.manage_agents_menu()
 
 
 def train_agent(self, agent_name, agent_type, strategy):
