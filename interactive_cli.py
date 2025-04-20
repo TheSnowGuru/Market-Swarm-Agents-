@@ -199,7 +199,7 @@ except ImportError as e:
 from cli.cli_agent_management import (
     manage_agents_menu,
     create_agent_workflow,
-    create_new_strategy_workflow, # <-- ADDED
+    # create_new_strategy_workflow, # <-- ADDED # Removed as per request
     edit_agent_workflow,
     train_agent_interactive,
     test_agent,
@@ -208,10 +208,11 @@ from cli.cli_agent_management import (
     _display_agent_config_summary
 )
 from cli.cli_trade_generation import (
-    generate_trades_for_agent_workflow, # Called by analysis menu
+    # generate_trades_for_agent_workflow, # Called by analysis menu # Removed as per request
+    generate_trade_data_workflow, # Added as per request
     view_synthetic_trades,             # Called by analysis menu
     # Helpers needed by other modules via self:
-    generate_synthetic_trades_for_agent,
+    # generate_synthetic_trades_for_agent, # Removed as per request
     _display_trade_statistics
     # configure_trade_generation, generate_synthetic_trades_workflow are likely standalone
 )
@@ -254,7 +255,7 @@ class SwarmCLI:
         # Agent Management
         self.manage_agents_menu = manage_agents_menu.__get__(self)
         self.create_agent_workflow = create_agent_workflow.__get__(self)
-        self.create_new_strategy_workflow = create_new_strategy_workflow.__get__(self) # <-- ADDED
+        # self.create_new_strategy_workflow = create_new_strategy_workflow.__get__(self) # <-- ADDED # Removed as per request
         self.edit_agent_workflow = edit_agent_workflow.__get__(self)
         self.train_agent_interactive = train_agent_interactive.__get__(self)
         self.test_agent = test_agent.__get__(self)
@@ -263,14 +264,15 @@ class SwarmCLI:
         self._display_agent_config_summary = _display_agent_config_summary.__get__(self)
 
         # Trade Generation
-        self.generate_trades_for_agent_workflow = generate_trades_for_agent_workflow.__get__(self) # Called by analysis menu
+        # self.generate_trades_for_agent_workflow = generate_trades_for_agent_workflow.__get__(self) # Called by analysis menu # Removed as per request
+        self.generate_trade_data_workflow = generate_trade_data_workflow.__get__(self) # Added as per request
         self.view_synthetic_trades = view_synthetic_trades.__get__(self) # Called by analysis menu
         # Helpers potentially used across modules via self:
-        self.generate_synthetic_trades_for_agent = generate_synthetic_trades_for_agent.__get__(self) # Called by agent creation
+        # self.generate_synthetic_trades_for_agent = generate_synthetic_trades_for_agent.__get__(self) # Called by agent creation # Removed as per request
         self._display_trade_statistics = _display_trade_statistics.__get__(self) # Called by agent creation & analysis
 
         # Trade Analysis
-        self.analyze_trades_menu = analyze_trades_menu.__get__(self) # <-- CHANGE THIS LINE
+        self.analyze_trades_menu = analyze_trades_menu.__get__(self) # <-- CHANGE THIS LINE # Kept as per request
         self.filter_trades_workflow = filter_trades_workflow.__get__(self)
         self.identify_patterns_workflow = identify_patterns_workflow.__get__(self)
         self.generate_rules_workflow = generate_rules_workflow.__get__(self)
@@ -308,7 +310,7 @@ class SwarmCLI:
         if choice == "Manage Agents":
             self.manage_agents_menu() # Call the bound method
         elif choice == "Analyze Trades":
-            self.trade_analysis_menu() # Call the bound method
+            self.analyze_trades_menu() # Call the bound method (Corrected name)
         elif choice == "Restart":
             self.console.print("[green]Restarting main menu...[/green]")
             # Returning will cause the loop in 'run' to continue, effectively restarting
