@@ -208,7 +208,7 @@ from cli.cli_trade_generation import (
     # configure_trade_generation, generate_synthetic_trades_workflow are likely standalone
 )
 from cli.cli_trade_analysis import (
-    trade_analysis_menu,
+    analyze_trades_menu, # <-- CHANGE THIS LINE
     filter_trades_workflow,
     identify_patterns_workflow,
     generate_rules_workflow,
