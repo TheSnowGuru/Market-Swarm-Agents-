@@ -620,7 +620,7 @@ def create_agent_workflow(self):
 
     self._update_selection("Generate Trades", "Yes" if generate_trades else "No") # Assuming this exists via self
 
-    agent_config = {} # Initialize agent_config dictionary
+    agent_config = {} # Initialize agent_config dictionary # Keep this line for now, it gets overwritten below
 
     if generate_trades:
         # Use the same market data and features to generate synthetic trades
@@ -635,6 +635,7 @@ def create_agent_workflow(self):
              # Let's continue without trades for now
              generate_trades = False # Mark as not generated
              self._update_selection("Generate Trades", "No")
+             output_path = None # Ensure output_path is None if trades not generated
         else:
             # Configure trade generation parameters
             self.console.print("[bold]Configure Synthetic Trade Parameters:[/bold]")
@@ -773,6 +774,7 @@ def create_agent_workflow(self):
 
                 if trades_df is None or len(trades_df) == 0:
                     self.console.print("[red]No trades were generated with the given parameters.[/red]")
+                    output_path = None # Ensure output_path is None
                 else:
                     # Display trade statistics
                     stats = generator.get_trade_statistics()
@@ -795,7 +797,9 @@ def create_agent_workflow(self):
                         self.console.print(f"[green]Trades saved to: {output_path}[/green]")
 
                         # Store the path in the agent configuration that will be saved later
-                        agent_config['synthetic_trades_path'] = output_path
+                        # agent_config['synthetic_trades_path'] = output_path # Moved after generate_agent_config
+                    else:
+                         output_path = None # Ensure output_path is None if not saved
 
             except FileNotFoundError:
                  self.console.print(f"[red]Error: Market data file not found at {market_data_path}[/red]")
@@ -813,25 +817,36 @@ def create_agent_workflow(self):
                 self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
                 # Go back
                 return self.create_agent_workflow()
-    # else: # If not generating trades
-    #      pass # Continue without trades path
+    else: # If not generating trades
+         output_path = None # Ensure output_path is None
+         market_data_path = None # Ensure market_data_path is None if not generated
 
     # 6. Automatic Training (Placeholder)
     self.console.print(f"[yellow]Automatically training {agent_name}...[/yellow]")
 
-    # Generate Agent Configuration
-    # Ensure agent_config is updated with all selections made so far
-    agent_config.update({
-        'agent_name': agent_name,
-        'agent_type': agent_type,
-        'strategy': selected_strategy,
-        'features': features,
-        'feature_params': feature_params
-        # Add other relevant params like RR, SL, TP if they were configured and needed by the agent itself
-    })
-    # Add trade generation params if they were set
+    # --- Assemble Agent Configuration ---
+    # Generate base agent configuration using the manager's method
+    agent_config = config_manager.generate_agent_config(
+        agent_name=agent_name,
+        agent_type=agent_type,
+        strategy=selected_strategy,
+        features=features,
+        feature_params=feature_params,
+        # Pass training params if collected, otherwise it defaults to {}
+        # Assuming training params are not collected in this specific workflow yet
+        training_params={} # Placeholder for now
+    )
+
+    # Add specific fields collected during this workflow that are not standard generator args
+    # Add synthetic_trades_path if it was generated and saved
+    if 'output_path' in locals() and output_path: # Check if trades were saved
+         agent_config['synthetic_trades_path'] = output_path
+    # Add market data path if selected/used
+    if 'market_data_path' in locals() and market_data_path:
+         agent_config['market_data'] = market_data_path # Store the selected market data path
+    # Add trade generation params if they were set (might be useful for reproducibility)
     if generate_trades and 'gen_config' in locals():
-         agent_config.update(gen_config)
+         agent_config['trade_generation_params'] = gen_config # Store the trade gen config used
 
 
     # Display agent configuration summary
@@ -844,10 +859,13 @@ def create_agent_workflow(self):
     trained_model = self.train_agent(agent_name, agent_type, selected_strategy)
 
     # Save Configuration and Model
+    # Pass the generated config object to save_agent_config
+    # save_agent_config uses config['name'] internally now
     config_path = config_manager.save_agent_config(agent_config)
-    model_path = config_manager.save_model(agent_name, trained_model) # trained_model is placeholder
+    # Use agent_name from the config for consistency when saving the model
+    model_path = config_manager.save_model(agent_config['name'], trained_model) # trained_model is placeholder
 
-    self.console.print(f"[green]Agent '{agent_name}' created and trained successfully![/green]")
+    self.console.print(f"[green]Agent '{agent_config['name']}' created and trained successfully![/green]")
     self.console.print(f"Configuration saved to: {config_path}")
     if model_path:
         self.console.print(f"Model saved to: {model_path}")
