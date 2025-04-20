@@ -210,7 +210,7 @@ def calculate_all_features(data: pd.DataFrame, selected_features: list = None) -
 
         # Fill NaN values that might be created during calculations
         # Consider a more robust fill method if 0 is inappropriate (e.g., ffill, bfill)
-        df.fillna(method='ffill', inplace=True) # Forward fill first
+        df.ffill(inplace=True) # Forward fill first (using recommended method)
         df.fillna(0, inplace=True) # Fill remaining NaNs (e.g., at the beginning)
 
 
