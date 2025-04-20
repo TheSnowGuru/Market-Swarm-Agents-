@@ -308,265 +308,29 @@ class SwarmCLI:
         self._update_selection("Market Data", selected_file_relative)
         return full_path # Return the full path
 
-    # --- Agent Feature Selection/Labeling Methods Moved to cli_agent_management.py ---
-    # (Methods like _select_and_label_features are bound in __init__)
-
     def backtesting_menu(self):
-        """
-        Interactive feature selection and trade labeling workflow
-        
-        Args:
-            market_data (str): Path to market data CSV
-        
-        Returns:
-            dict: Comprehensive feature and trade labeling configuration
-        """
-        # 1. Feature Selection (only if not already selected)
-        if not hasattr(self, '_selected_features'):
-            try:
-                # Get available features from vectorbt feature extractor
-                available_features = get_available_features()
-                
-                # Limit the number of features that can be selected to prevent app crashes
-                self.console.print("[yellow]Note: For optimal performance, select features strategically.[/yellow]")
-                self.console.print("[yellow]Vectorbt with numba will accelerate calculations.[/yellow]")
-                
-                self._selected_features = questionary.checkbox(
-                    "Select features for strategy analysis (press Enter when done, or select none and press Enter to go back):",
-                    choices=available_features
-                ).ask()
-                
-                # If no features selected, treat as "Back" option
-                if not self._selected_features:
-                    return None
-                
-                # Display selected features
-                self.console.print("[bold]Selected Features:[/bold]")
-                for feature in self._selected_features:
-                    self.console.print(f"- {feature}")
-            except Exception as e:
-                self.console.print(f"[red]Error during feature selection: {e}[/red]")
-                return None
-        
-        # 2. Load Market Data and Calculate Features
-        try:
-            df = pd.read_csv(market_data)
-            
-            # Ensure required columns exist
-            required_columns = ['Close', 'Open', 'High', 'Low', 'Volume']
-            missing_columns = [col for col in required_columns if col not in df.columns]
-            
-            if missing_columns:
-                self.console.print(f"[red]Missing required columns: {', '.join(missing_columns)}[/red]")
-                
-                # Try to handle common column name variations
-                column_mapping = {
-                    'close': 'Close',
-                    'open': 'Open',
-                    'high': 'High',
-                    'low': 'Low',
-                    'volume': 'Volume'
-                }
-                
-                # Check if lowercase versions exist and rename them
-                for lower, upper in column_mapping.items():
-                    if lower in df.columns and upper not in df.columns:
-                        df[upper] = df[lower]
-                        self.console.print(f"[yellow]Renamed column '{lower}' to '{upper}'[/yellow]")
-                
-                # Check again after renaming
-                missing_columns = [col for col in required_columns if col not in df.columns]
-                if missing_columns:
-                    self.console.print(f"[red]Still missing required columns: {', '.join(missing_columns)}[/red]")
-                    return None
-            
-            # Calculate all features using vectorbt with numba acceleration
-            self.console.print("[yellow]Calculating features using vectorbt with numba acceleration...[/yellow]")
-            
-            # First, ensure data is properly formatted
-            df.index = pd.to_datetime(df.index) if df.index.dtype != 'datetime64[ns]' and 'date' not in df.columns else df.index
-            if 'date' in df.columns and df.index.dtype != 'datetime64[ns]':
-                try:
-                    df['date'] = pd.to_datetime(df['date'])
-                    df.set_index('date', inplace=True)
-                except:
-                    pass  # Keep original index if conversion fails
-            
-            # Calculate features with progress indicator
-            self.console.print("[yellow]Initializing vectorbt engine...[/yellow]")
-            df = calculate_all_features(df)
-            self.console.print("[green]Features calculated successfully![/green]")
-            
-            # Ask if user wants to generate synthetic trades with these features
-            generate_trades = questionary.confirm(
-                "Would you like to generate synthetic trades using these features?"
-            ).ask()
-            
-            if generate_trades:
-                # Get agent name for the trades
-                agent_name = self.current_context.get('agent_name', 'unnamed_agent')
-                
-                # Generate synthetic trades
-                trades_path = self.generate_synthetic_trades_for_agent(agent_name, self._selected_features, market_data)
-                
-                if trades_path:
-                    # Ask if user wants to continue with feature selection or analyze trades
-                    analyze_trades = questionary.confirm(
-                        "Would you like to analyze these trades now instead of continuing with feature selection?"
-                    ).ask()
-                    
-                    if analyze_trades:
-                        # Initialize analyzer with the generated trades
-                        analyzer = TradeAnalyzer()
-                        analyzer.load_trades(trades_path)
-                        self.trade_analyzer = analyzer
-                        self.filter_trades_workflow()
-                        return None
-            
-        except Exception as e:
-            self.console.print(f"[red]Error loading market data or calculating features: {e}[/red]")
-            import traceback
-            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            return None
-        
-        # 3. Interactive Trade Labeling with calculated features
-        labeled_trades = self._label_trades_interactively(df, self._selected_features)
-        
-        # 4. Derive Strategy Parameters
-        strategy_params = self._derive_strategy_parameters(labeled_trades)
-        
-        return {
-            'features': self._selected_features,
-            'labeled_trades': labeled_trades,
-            'strategy_params': strategy_params
-        }
-
-    def _label_trades_interactively(self, df, features):
-        """
-        Interactive trade labeling interface
-        
-        Args:
-            df (pd.DataFrame): Market price data with calculated features
-            features (list): Selected features
-        
-        Returns:
-            list: Labeled trades with contextual information
-        """
-        labeled_trades = []
-        
-        # Create a table to display feature values
-        table = Table(title="Feature Values")
-        table.add_column("Feature", style="cyan")
-        table.add_column("Value", style="green")
-        
-        # Display sample trades for labeling
-        for index, row in df.iterrows():
-            # Create a dictionary of trade details
-            trade_details = {
-                'date': row.get('date', str(index)),
-                'price': row.get('Close', row.get('close', 0)),
-                **{feature: row.get(feature, 'N/A') for feature in features}
-            }
-            
-            # Display feature values in a table
-            self.console.print(f"[bold]Trade at {trade_details['date']} - Price: {trade_details['price']}[/bold]")
-            
-            for feature in features:
-                if feature in row:
-                    table.add_row(feature, str(round(row[feature], 4) if isinstance(row[feature], (int, float)) else row[feature]))
-            
-            self.console.print(table)
-            
-            # Add option to go back
-            choices = ["Good Trade", "Bad Trade", "Skip", "Back to Feature Selection"]
-            trade_choice = questionary.select(
-                f"Evaluate this trade:",
-                choices=choices
-            ).ask()
-            
-            if trade_choice == "Back to Feature Selection":
-                return None
-            elif trade_choice == "Skip":
-                continue
-            else:
-                is_good_trade = trade_choice == "Good Trade"
-                labeled_trades.append({
-                    'trade_details': trade_details,
-                    'is_good_trade': is_good_trade
-                })
-        
-        return labeled_trades
-
-    def _derive_strategy_parameters(self, labeled_trades):
-        """
-        Derive strategy parameters from labeled trades
-        
-        Args:
-            labeled_trades (list): Trades with labels
-        
-        Returns:
-            dict: Derived strategy parameters
-        """
-        good_trades = [trade for trade in labeled_trades if trade['is_good_trade']]
-        
-        # Calculate key metrics
-        metrics = {
-            'win_rate': len(good_trades) / len(labeled_trades),
-            'avg_profit': np.mean([trade['trade_details']['price'] for trade in good_trades]),
-            'volatility': np.std([trade['trade_details']['price'] for trade in good_trades])
-        }
-        
-        # Recommend strategy parameters
-        strategy_params = {
-            'profit_threshold': metrics['win_rate'],
-            'stop_loss': metrics['volatility'] * 0.5,
-            'recommended_features': list(set(
-                feature for trade in good_trades 
-                for feature in trade['trade_details'].keys() 
-                if feature not in ['date', 'price']
-            ))
-        }
-        
-    def backtesting_menu(self):
-        choices = [
-            "Run Backtest",
-            "Compare Strategies",
-            "View Backtest Results",
-            "Back to Main Menu"
-        ]
-        
-        choice = questionary.select(
-            "Backtesting:", 
-            choices=choices
-        ).ask()
-
-        if choice == "Run Backtest":
-            self.run_backtest_interactive()
-        elif choice == "Back to Main Menu":
-            self.main_menu()
+         self.console.print("[yellow]Backtesting functionality not fully implemented yet.[/yellow]")
+         # Placeholder options
+         choices = ["Run Backtest (Placeholder)", "Back to Main Menu"]
+         choice = questionary.select("Backtesting:", choices=choices).ask()
+         if choice == "Back to Main Menu" or choice is None:
+              self.main_menu()
+         else:
+              self.run_backtest_interactive() # Call placeholder
 
     def run_backtest_interactive(self):
-        strategy = questionary.select(
-            "Select strategy:", 
-            choices=['optimal-trade', 'scalper', 'trend-follower', 'correlation']
-        ).ask()
-        
-        data_path = questionary.text(
-            "Enter market data path:"
-        ).ask()
-        
-        report_path = questionary.text(
-            "Enter report output path (optional):"
-        ).ask()
-        
-        # Temporarily print what would happen instead of calling the function
-        self.console.print(f"[bold]Would run backtest with:[/bold]")
-        self.console.print(f"- Strategy: {strategy}")
-        self.console.print(f"- Data: {data_path}")
-        self.console.print(f"- Report: {report_path}")
-        
-        # backtest(strategy=strategy, data=data_path, report=report_path)
-        
+         self.console.print("[yellow]Interactive backtest setup not fully implemented.[/yellow]")
+         # Placeholder logic
+         agent_name = questionary.text("Enter agent name to backtest (optional):").ask()
+         data_path = self._select_market_data()
+         if data_path == 'back': return self.backtesting_menu()
+
+         self.console.print(f"Simulating backtest for agent '{agent_name if agent_name else 'Generic Strategy'}' using data '{os.path.basename(data_path)}'...")
+         # In future, call actual backtesting utility here
+         questionary.text("Press Enter to return to Backtesting Menu...").ask()
+         self.backtesting_menu()
+
+
     # --- Trade Generation/Viewing Methods Moved to cli/cli_trade_generation.py ---
 
     # --- Trade Analysis Methods Moved to cli/cli_trade_analysis.py ---
@@ -616,135 +380,8 @@ class SwarmCLI:
         """
         Update the current selections and display the panel
         
-# Assign the imported functions as methods to the SwarmCLI class
-# This allows calling them using self.method_name(...) within SwarmCLI
-# SwarmCLI.generate_synthetic_trades_for_agent = cli_trade_generation.generate_synthetic_trades_for_agent
-# SwarmCLI.generate_synthetic_trades_workflow = cli_trade_generation.generate_synthetic_trades_workflow
-# SwarmCLI.generate_trades_for_agent_workflow = cli_trade_generation.generate_trades_for_agent_workflow
-# SwarmCLI._configure_trade_conditions = cli_trade_generation._configure_trade_conditions
-# SwarmCLI._display_trade_statistics = cli_trade_generation._display_trade_statistics
-# SwarmCLI.view_synthetic_trades = cli_trade_generation.view_synthetic_trades
-# SwarmCLI.configure_trade_generation = cli_trade_generation.configure_trade_generation
-
-
-if __name__ == "__main__":
-    main()
-        """
-        # 1. Select an Agent
-        agents = self._list_existing_agents()
-        
-        # Filter out menu options
-        actual_agents = [agent for agent in agents if agent not in ['Create New Agent', 'Back to Main Menu']]
-        
-        if not actual_agents:
-            self.console.print("[yellow]No existing agents found. Create an agent first.[/yellow]")
-            return self.trade_analysis_menu()
-        
-        # Add back option
-        agent_choices = actual_agents + ['Back']
-        
-        selected_agent = questionary.select(
-            "Select an agent to generate trades for:",
-            choices=agent_choices
-        ).ask()
-        
-        if selected_agent == 'Back':
-            return self.trade_analysis_menu()
-        
-        # 2. Load agent configuration
-        config_manager = AgentConfigManager()
-        agent_config = config_manager.load_agent_config(selected_agent)
-        
-        if not agent_config:
-            self.console.print(f"[red]Could not load configuration for agent: {selected_agent}[/red]")
-            return self.trade_analysis_menu()
-            
-        # Display agent configuration summary
-        self.console.print("[bold]Agent Configuration Summary:[/bold]")
-        self._display_agent_config_summary(agent_config)
-        
-        # 3. Extract features from agent config
-        features = agent_config.get('features', [])
-        
-        if not features:
-            self.console.print("[yellow]No features found in agent configuration. Please select features:[/yellow]")
-            available_features = get_available_features()
-            features = questionary.checkbox(
-                "Select features for trade generation:",
-                choices=available_features
-            ).ask()
-            
-            if not features:
-                return self.trade_analysis_menu()
-        
-        # 4. Generate trades for the agent
-        trades_path = self.generate_synthetic_trades_for_agent(selected_agent, features)
-        
-        if trades_path:
-            # Update agent configuration with trades path
-            agent_config['synthetic_trades_path'] = trades_path
-            config_manager.save_agent_config(agent_config)
-            
-            # Ask if user wants to analyze the trades
-            analyze_trades = questionary.confirm("Would you like to analyze these trades now?").ask()
-            
-            if analyze_trades:
-                # Initialize analyzer with the agent's trades
-                analyzer = TradeAnalyzer()
-                analyzer.load_trades(trades_path)
-                self.trade_analyzer = analyzer
-                self.filter_trades_workflow()
-            else:
-                return self.trade_analysis_menu()
-        else:
-            self.console.print("[yellow]No trades were generated or saved.[/yellow]")
-            return self.trade_analysis_menu()
-    
-    def visualize_analysis_workflow(self, analyzer=None):
-        """
-        Workflow for visualizing trade analysis
-        
-        Args:
-            analyzer (TradeAnalyzer, optional): Existing analyzer with completed analysis
-        """
-        if analyzer is None:
-            # Check if we have a stored analyzer
-            if hasattr(self, 'trade_analyzer'):
-                analyzer = self.trade_analyzer
-                
-                # Check if analysis has been performed
-                if analyzer.filtered_trades is None:
-                    self.console.print("[yellow]No analysis performed. Filter trades first.[/yellow]")
-                    return self.trade_analysis_menu()
-            else:
-                self.console.print("[yellow]No analysis performed. Filter trades first.[/yellow]")
-                return self.trade_analysis_menu()
-        
-        # Generate visualizations
-        self.console.print("[bold green]Generating visualizations...[/bold green]")
-        
-        try:
-            # Create visualizations
-            output_dir = analyzer.visualize_patterns()
-            
-            self.console.print(f"[green]Visualizations saved to: {output_dir}[/green]")
-            
-            # Open visualizations?
-            open_viz = questionary.confirm("Open visualizations folder?").ask()
-            
-            if open_viz:
-                # Open folder in file explorer
-                import subprocess
-                os.startfile(output_dir) if os.name == 'nt' else subprocess.call(['xdg-open', output_dir])
-            
-            # Return to menu
-            return self.trade_analysis_menu()
-            
-        except Exception as e:
-            self.console.print(f"[red]Error generating visualizations: {e}[/red]")
-            import traceback
-            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            return self.trade_analysis_menu()
+    # --- Agent Management Methods Moved to cli/cli_agent_management.py ---
+    # (Methods like manage_agents_menu, create_agent_workflow etc. are bound in __init__)
 
     def run(self):
         try:
@@ -785,16 +422,7 @@ def main():
             print("Please try running this script in a standard command prompt window.")
             sys.exit(1)
 
-# Assign the imported functions as methods to the SwarmCLI class
-# This allows calling them using self.method_name(...) within SwarmCLI
-SwarmCLI.generate_synthetic_trades_for_agent = cli_trade_generation.generate_synthetic_trades_for_agent
-SwarmCLI.generate_synthetic_trades_workflow = cli_trade_generation.generate_synthetic_trades_workflow
-SwarmCLI.generate_trades_for_agent_workflow = cli_trade_generation.generate_trades_for_agent_workflow
-SwarmCLI._configure_trade_conditions = cli_trade_generation._configure_trade_conditions
-SwarmCLI._display_trade_statistics = cli_trade_generation._display_trade_statistics
-SwarmCLI.view_synthetic_trades = cli_trade_generation.view_synthetic_trades
-SwarmCLI.configure_trade_generation = cli_trade_generation.configure_trade_generation
-
+# Method binding is now done within SwarmCLI.__init__ using __get__
 
 if __name__ == "__main__":
     main()
