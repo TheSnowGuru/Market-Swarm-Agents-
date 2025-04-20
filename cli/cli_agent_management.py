@@ -914,8 +914,9 @@ def create_new_strategy_workflow(self, agent_name):
         return None
 
     # 2. Interactive Feature Selection and Trade Labeling
-    # Need access to _select_and_label_features, assuming it exists via self
-    strategy_config_details = self._select_and_label_features(market_data_path)
+    # Call the function directly as it's in the same module
+    # Pass 'self' explicitly because the function needs it to call other bound methods
+    strategy_config_details = _select_and_label_features(self, market_data_path)
 
     if strategy_config_details is None:
         return None # User likely backed out
