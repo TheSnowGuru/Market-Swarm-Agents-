@@ -272,9 +272,8 @@ def _select_and_label_features(self, market_data):
             agent_name = self.current_context.get('agent_name', 'unnamed_agent')
 
             # Generate synthetic trades
-            # Need to ensure generate_synthetic_trades_for_agent is accessible
-            # Assuming it's imported or defined in this file now
-            trades_path = generate_synthetic_trades_for_agent(self, agent_name, self._selected_features, market_data)
+            # Call via self as it's bound in SwarmCLI
+            trades_path = self.generate_synthetic_trades_for_agent(agent_name, self._selected_features, market_data)
 
 
             if trades_path:
@@ -287,11 +286,10 @@ def _select_and_label_features(self, market_data):
                     # Initialize analyzer with the generated trades
                     analyzer = TradeAnalyzer()
                     analyzer.load_trades(trades_path)
-                    self.trade_analyzer = analyzer
-                    # Need to ensure filter_trades_workflow is accessible
-                    # Assuming it's imported or defined in this file now
-                    filter_trades_workflow(self) # Pass self if it needs CLI context
-                    return None
+                    self.trade_analyzer = analyzer # Store analyzer on self
+                    # Call via self as it's bound in SwarmCLI
+                    self.filter_trades_workflow() # Pass self if it needs CLI context
+                    return None # Exit this workflow as analysis workflow takes over
 
     except Exception as e:
         self.console.print(f"[red]Error loading market data or calculating features: {e}[/red]")

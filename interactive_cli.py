@@ -10,99 +10,181 @@ from rich.prompt import Prompt, Confirm
 from rich.table import Table
 try:
     import questionary
-    
-    # Patch questionary to handle Ctrl+D
+
+    # Patch questionary to handle Ctrl+D/EOFError consistently AND maintain .ask() pattern
     original_select = questionary.select
     original_checkbox = questionary.checkbox
     original_text = questionary.text
     original_confirm = questionary.confirm
-    
-    def select_with_eof(*args, **kwargs):
-        try:
-            return original_select(*args, **kwargs)
-        except EOFError:
-            raise KeyboardInterrupt
-            
-    def checkbox_with_eof(*args, **kwargs):
-        try:
-            return original_checkbox(*args, **kwargs)
-        except EOFError:
-            raise KeyboardInterrupt
-            
-    def text_with_eof(*args, **kwargs):
-        try:
-            return original_text(*args, **kwargs)
-        except EOFError:
-            raise KeyboardInterrupt
-            
-    def confirm_with_eof(*args, **kwargs):
-        try:
-            return original_confirm(*args, **kwargs)
-        except EOFError:
-            raise KeyboardInterrupt
-            
-    questionary.select = select_with_eof
-    questionary.checkbox = checkbox_with_eof
-    questionary.text = text_with_eof
-    questionary.confirm = confirm_with_eof
-    
-except Exception as e:
+
+    # Define wrapper functions that return the question object first
+    def select_wrapper(*args, **kwargs):
+        q = original_select(*args, **kwargs)
+        original_ask = q.ask # Store original ask
+        def ask_with_eof(): # Define the patched ask method
+            try:
+                return original_ask()
+            except EOFError:
+                raise KeyboardInterrupt
+        q.ask = ask_with_eof # Replace the ask method on the object
+        return q # Return the question object
+
+    def checkbox_wrapper(*args, **kwargs):
+        q = original_checkbox(*args, **kwargs)
+        original_ask = q.ask
+        def ask_with_eof():
+            try:
+                return original_ask()
+            except EOFError:
+                raise KeyboardInterrupt
+        q.ask = ask_with_eof
+        return q
+
+    def text_wrapper(*args, **kwargs):
+        q = original_text(*args, **kwargs)
+        original_ask = q.ask
+        def ask_with_eof():
+            try:
+                return original_ask()
+            except EOFError:
+                raise KeyboardInterrupt
+        q.ask = ask_with_eof
+        return q
+
+    def confirm_wrapper(*args, **kwargs):
+        q = original_confirm(*args, **kwargs)
+        original_ask = q.ask
+        def ask_with_eof():
+            try:
+                return original_ask()
+            except EOFError:
+                raise KeyboardInterrupt
+        q.ask = ask_with_eof
+        return q
+
+    # Re-assign the patched wrapper functions
+    questionary.select = select_wrapper
+    questionary.checkbox = checkbox_wrapper
+    questionary.text = text_wrapper
+    questionary.confirm = confirm_wrapper
+    print("[dim]Questionary imported and patched for EOF handling.[/dim]")
+
+
+except ImportError as e:
+    print(f"[yellow]Warning: python-questionary not found ({e}). Using basic fallback prompts.[/yellow]")
     # Fallback for environments where questionary doesn't work
     class FallbackQuestionary:
+        # Define a simple class to mimic the .ask() behavior
+        class AskResult:
+            def __init__(self, value):
+                self._value = value
+            def ask(self):
+                return self._value
+
         @staticmethod
-        def select(message, choices):
-            print(message)
+        def select(message, choices, **kwargs): # Add **kwargs
+            print(f"\n--- {message} ---")
             for i, choice in enumerate(choices, 1):
                 print(f"{i}. {choice}")
             while True:
                 try:
-                    selection = int(input("Enter your choice (number): ")) - 1
-                    if 0 <= selection < len(choices):
-                        return choices[selection]
+                    selection = input("Enter your choice (number): ")
+                    if not selection: continue
+                    idx = int(selection) - 1
+                    if 0 <= idx < len(choices):
+                        return FallbackQuestionary.AskResult(choices[idx]) # Return AskResult
                     print("Invalid selection. Try again.")
                 except ValueError:
                     print("Please enter a number.")
-        
+                except EOFError:
+                     raise KeyboardInterrupt
+
         @staticmethod
-        def checkbox(message, choices):
-            print(message)
+        def checkbox(message, choices, **kwargs):
+            print(f"\n--- {message} ---")
             for i, choice in enumerate(choices, 1):
                 print(f"{i}. {choice}")
             while True:
                 try:
-                    selections = input("Enter your choices (comma-separated numbers): ").split(',')
-                    selected = []
-                    for s in selections:
-                        idx = int(s.strip()) - 1
-                        if 0 <= idx < len(choices):
-                            selected.append(choices[idx])
-                    return selected
+                    selections = input("Enter choices (comma-separated numbers, e.g., 1,3): ").split(',')
+                    selected_values = []
+                    valid_input = True
+                    if selections == ['']:
+                         selected_values = []
+                    else:
+                        for s in selections:
+                            s_strip = s.strip()
+                            if not s_strip: continue
+                            idx = int(s_strip) - 1
+                            if 0 <= idx < len(choices):
+                                selected_values.append(choices[idx])
+                            else:
+                                print(f"Invalid choice number: {idx + 1}")
+                                valid_input = False
+                                break
+                    if valid_input:
+                        return FallbackQuestionary.AskResult(selected_values) # Return AskResult
+
                 except ValueError:
                     print("Please enter valid numbers separated by commas.")
-        
+                except EOFError:
+                     raise KeyboardInterrupt
+
         @staticmethod
-        def text(message, validate=None, default=None):
+        def text(message, validate=None, default=None, **kwargs):
             if default:
                 prompt = f"{message} [{default}]: "
             else:
                 prompt = f"{message}: "
-            
+
             while True:
-                response = input(prompt)
-                if not response and default:
-                    return default
-                if validate is None or validate(response):
-                    return response
-                print("Invalid input. Please try again.")
-        
+                try:
+                    response = input(prompt)
+                    result = response or default
+                    if result is None:
+                         print("Input required.")
+                         continue
+
+                    is_valid = True
+                    if validate:
+                         # Basic validation check (cannot replicate complex lambdas)
+                         try:
+                              if not validate(result): is_valid = False
+                         except Exception: # Catch errors in simple validation
+                              is_valid = False
+
+                    if is_valid:
+                        return FallbackQuestionary.AskResult(result) # Return AskResult
+                    else:
+                         print("Invalid input. Please try again.")
+
+                except EOFError:
+                     raise KeyboardInterrupt
+
         @staticmethod
-        def confirm(message):
-            response = input(f"{message} (y/n): ").lower()
-            return response.startswith('y')
-    
+        def confirm(message, default=False, **kwargs):
+            prompt_suffix = f" (y/n) [{'Y/n' if default else 'y/N'}]: "
+            prompt = f"{message}{prompt_suffix}"
+            while True:
+                try:
+                    response = input(prompt).lower().strip()
+                    if response == 'y':
+                        result = True
+                    elif response == 'n':
+                        result = False
+                    elif response == '':
+                        result = default
+                    else:
+                        print("Please enter 'y' or 'n'.")
+                        continue
+
+                    return FallbackQuestionary.AskResult(result) # Return AskResult
+
+                except EOFError:
+                     raise KeyboardInterrupt
+
     # Use the fallback if questionary fails
     questionary = FallbackQuestionary()
-    print(f"Warning: Using fallback questionary due to: {e}")
 
 # Import functions from the new CLI modules
 # Import only functions called directly from SwarmCLI or needed for binding
@@ -422,9 +504,11 @@ class SwarmCLI:
                   sys.exit(1)
 
 def main():
-    # Call setup_logging here if you want logging configured globally
-    # setup_logging() # Uncomment if needed
-    logging.basicConfig(level=logging.INFO) # Keep basic config for now
+    # Call setup_logging here to configure logging using the utility function
+    setup_logging() # Use the imported setup function
+    logger = logging.getLogger(__name__) # Get logger after setup
+    logger.info("Starting SWARM Trading System CLI...")
+
     try:
         cli = SwarmCLI()
         cli.run()
