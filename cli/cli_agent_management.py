@@ -683,185 +683,390 @@ def _edit_feature_params(self, features, current_params):
 def train_agent_interactive(self):
     # 1. Select Agent to Train
     agents_with_options = self._list_existing_agents() # Assuming this exists via self
-                 "Create New Strategy",
-                 "Assign Default Strategy",
-                 "Keep Existing",
-                 "Back"
-             ]
-         ).ask()
-         if strategy_action is None: raise KeyboardInterrupt
+    # Filter out non-agent options for training selection
+    agent_choices = [agent for agent in agents_with_options if agent not in ['Create New Agent', 'Back']]
+    if not agent_choices:
+         self.console.print("[yellow]No agents available to train. Create an agent first.[/yellow]")
+         return self.manage_agents_menu() # Or agent_management_menu?
 
-         if strategy_action == "Create New Strategy":
-             # Pass the potentially updated agent name
-             new_strategy = self.create_new_strategy_workflow(selected_agent)
-             if new_strategy:
-                 agent_config['strategy'] = new_strategy
-                 # Update features based on new strategy if applicable
-                 # Assumes create_new_strategy_workflow sets self._selected_features
-                 agent_config['features'] = getattr(self, '_selected_features', agent_config.get('features', []))
-                 self._update_selection("Strategy", new_strategy)
-                 self._update_selection("Features", agent_config['features'])
-                 config_changed = True
-                 # Prompt to update feature params if features changed
-                 if questionary.confirm("Strategy/Features changed. Update feature parameters now?").ask():
-                      # Call feature param editing logic here
-                      agent_config['feature_params'] = self._edit_feature_params(agent_config.get('features', []), agent_config.get('feature_params', {})) # ADD self.
-                      self._update_selection("Feature Params", agent_config['feature_params'])
+    # Continue with the correct logic for train_agent_interactive
+    agent_choices.append('Back')
+    selected_agent = questionary.select(
+        "Select agent to train:",
+        choices=agent_choices
+    ).ask()
 
-         elif strategy_action == "Assign Default Strategy":
-             default_strategy = f"{agent_config.get('agent_type', 'unknown')}_default_strategy"
-             agent_config['strategy'] = default_strategy
-             self._update_selection("Strategy", default_strategy)
-             config_changed = True
-         elif strategy_action == "Back":
-             return self.edit_agent_workflow() # Go back to edit options
+    if selected_agent == 'Back':
+        return self.manage_agents_menu() # Or agent_management_menu?
+    elif selected_agent is None: # Handle Ctrl+C/EOF
+         raise KeyboardInterrupt
 
-    elif edit_action == "Features":
-        available_features = get_available_features()
-        current_features = agent_config.get('features', [])
-        new_features = questionary.checkbox(
-            "Select features for the agent:",
-            choices=available_features,
-            default=current_features # Pre-select current features
-        ).ask()
-        if new_features is None: raise KeyboardInterrupt
+    # 2. Load Agent Config (to get type, strategy, etc.)
+    config_manager = AgentConfigManager()
+    agent_config = config_manager.load_agent_config(selected_agent)
+    if not agent_config:
+         self.console.print(f"[red]Could not load configuration for agent: {selected_agent}[/red]")
+         return self.train_agent_interactive() # Retry selection
 
-        if set(new_features) != set(current_features):
-             agent_config['features'] = new_features
-             self._update_selection("Features", new_features)
-             config_changed = True
-             # Prompt to update feature params if features changed
-             if questionary.confirm("Features changed. Update feature parameters now?").ask():
-                  # Call feature param editing logic
-                  agent_config['feature_params'] = self._edit_feature_params(agent_config.get('features', []), agent_config.get('feature_params', {})) # ADD self.
-                  self._update_selection("Feature Params", agent_config['feature_params'])
+    agent_type = agent_config.get('agent_type', 'unknown')
+    strategy = agent_config.get('strategy', 'unknown')
+
+    # 3. Select Training Data (Optional - could use data from config)
+    use_config_data = False
+    config_data_path = agent_config.get('market_data') # Get path from config if exists
+    if config_data_path and os.path.exists(config_data_path):
+         use_config_data = questionary.confirm(f"Use market data from config ({config_data_path})?").ask()
+         if use_config_data is None: raise KeyboardInterrupt
 
 
-    elif edit_action == "Feature Parameters":
-         if 'features' in agent_config and agent_config['features']:
-              agent_config['feature_params'] = self._edit_feature_params(agent_config.get('features', []), agent_config.get('feature_params', {})) # ADD self.
-              self._update_selection("Feature Params", agent_config['feature_params'])
-              config_changed = True # Mark config as changed
-         else:
-              self.console.print("[yellow]No features selected for this agent. Cannot edit parameters.[/yellow]")
+    if use_config_data:
+         data_path = config_data_path
+    else:
+         # Need access to _select_market_data, assuming it exists via self
+         data_path = self._select_market_data()
+         if data_path == 'back' or data_path == 'cancel' or data_path is None:
+              return self.train_agent_interactive() # Go back to agent selection
+
+    # 4. Specify Model Output Path (Optional)
+    default_model_path = config_manager.get_model_path(selected_agent) # Get default path
+    output_path = questionary.text(
+        "Enter model output path (leave blank for default):",
+        default="" # Start blank, show default implicitly via save_model later
+    ).ask()
+    if output_path is None: raise KeyboardInterrupt
 
 
-    elif edit_action == "Generate/Update Synthetic Trades":
-         # Call the dedicated workflow for generating trades for an agent
-         # Need access to generate_trades_for_agent_workflow, assuming it exists via self
-         # This workflow should handle its own logic and saving the trades path to config if successful
-         # We might need to reload the config after this step if it modifies it.
-         self.generate_trades_for_agent_workflow(selected_agent) # Pass agent name
-         # Reload config to see if trades path was added/updated
-         agent_config = config_manager.load_agent_config(selected_agent) # Use potentially new name
-         # No need to mark config_changed here, as the sub-workflow handles saving if needed.
+    # Use default if blank was entered
+    if not output_path:
+         output_path = default_model_path
+         self.console.print(f"[dim]Using default model path: {output_path}[/dim]")
 
 
-    elif edit_action == "Retrain Agent":
-        self.console.print(f"[yellow]Retraining agent {selected_agent}...[/yellow]")
-        # Call the training function (placeholder)
-        # Need access to train_agent, assuming it exists via self
-        trained_model = self.train_agent(
-            agent_config.get('agent_name', selected_agent),
-            agent_config.get('agent_type'),
-            agent_config.get('strategy')
-        )
-        # Save the new model
-        model_path = config_manager.save_model(selected_agent, trained_model) # Use potentially new name
-        if model_path:
-             self.console.print(f"[green]Agent retrained. New model saved to: {model_path}[/green]")
-        else:
-             self.console.print("[yellow]Model saving skipped (placeholder training).[/yellow]")
-        # No config change unless training modifies config itself
+    # 5. Run Training (Placeholder)
+    self.console.print(f"[bold]Training agent '{selected_agent}' ({agent_type}) with strategy '{strategy}'[/bold]")
+    self.console.print(f"Using data: {data_path}")
+    self.console.print(f"Saving model to: {output_path}")
 
-    elif edit_action == "Delete Agent":
-         confirm_delete = questionary.confirm(f"Are you sure you want to permanently delete agent '{selected_agent}' and its model?").ask()
-         if confirm_delete is None: raise KeyboardInterrupt
+    # Need access to train_agent, assuming it exists via self
+    trained_model = self.train_agent(selected_agent, agent_type, strategy)
 
-         if confirm_delete:
-              deleted = config_manager.delete_agent(selected_agent) # Use potentially new name
-              if deleted:
-                   self.console.print(f"[green]Agent '{selected_agent}' deleted successfully.[/green]")
-                   return self.manage_agents_menu() # Go back after deletion
-              else:
-                   self.console.print(f"[red]Failed to delete agent '{selected_agent}'. Check logs.[/red]")
-         # If not confirmed, just loop back to edit options
+    # 6. Save Model
+    # Pass the explicit path to save_model
+    saved_path = config_manager.save_model(selected_agent, trained_model, model_path=output_path)
 
-    # --- Save Changes ---
-    if config_changed:
-        self.console.print("[bold]Updated Agent Configuration:[/bold]")
-        self._display_agent_config_summary(agent_config) # Display the modified config
-        save_confirm = questionary.confirm("Save these changes?").ask()
-        if save_confirm is None: raise KeyboardInterrupt
 
-        if save_confirm:
-            # Handle potential renaming
-            save_name = agent_config.get('agent_name', selected_agent) # Final name to save as
-            if old_agent_name != save_name:
-                 # Attempt to rename existing files before saving new one
-                 self.console.print(f"Attempting to rename agent files from '{old_agent_name}' to '{save_name}'...")
-                 renamed = config_manager.rename_agent(old_agent_name, save_name)
-                 if not renamed:
-                      self.console.print(f"[yellow]Warning: Could not rename all old files for '{old_agent_name}'. New config will be saved as '{save_name}'.[/yellow]")
-                      # Decide if you want to proceed or abort
-                      proceed = questionary.confirm(f"Proceed with saving config as '{save_name}'?").ask()
-                      if not proceed:
-                           self.console.print("[yellow]Changes discarded.[/yellow]")
-                           return self.edit_agent_workflow() # Go back to edit options
+    if saved_path:
+        self.console.print(f"[green]Training complete. Model saved to: {saved_path}[/green]")
+    else:
+        self.console.print("[yellow]Training complete. Model saving skipped (placeholder training or error).[/yellow]")
 
-            # Save the potentially modified config under the final name
-            config_path = config_manager.save_agent_config(agent_config, agent_name=save_name)
-            if config_path:
-                 self.console.print(f"[green]Agent configuration saved to: {config_path}[/green]")
+    # Go back to the agent management menu
+    return self.manage_agents_menu()
+
+
+def train_agent(self, agent_name, agent_type, strategy):
+    """
+    Train an agent based on its type and strategy (Placeholder)
+
+    Args:
+        agent_name (str): Name of the agent
+        agent_type (str): Type of agent (scalper, trend-follower, etc.)
+        strategy (str): Strategy to be used
+
+    Returns:
+        object: Trained model or None
+    """
+    self.console.print(f"[yellow]Training agent: {agent_name}[/yellow]")
+
+    # Placeholder training logic
+    try:
+        # Simulate training process
+        self.console.print(f"Simulating training for {agent_type} agent with {strategy} strategy...")
+        import time
+        time.sleep(1) # Simulate work
+
+        # In a real implementation, this would involve:
+        # 1. Loading training data (using strategy or provided path)
+        # 2. Loading agent configuration
+        # 3. Preprocessing data based on agent features
+        # 4. Instantiating the correct agent class (e.g., ScalperAgent)
+        # 5. Calling an agent-specific `train` method
+        # 6. Returning the trained model/state
+
+        # For now, return a dummy model dictionary
+        dummy_model = {
+            'agent_name': agent_name,
+            'agent_type': agent_type,
+            'strategy': strategy,
+            'trained_timestamp': pd.Timestamp.now().isoformat(),
+            'model_parameters': {'param1': 0.5, 'param2': 'abc'}, # Example params
+            'training_status': 'completed_placeholder'
+        }
+        self.console.print("[green]Placeholder training finished.[/green]")
+        return dummy_model
+
+    except Exception as e:
+        self.console.print(f"[red]Placeholder training failed: {e}[/red]")
+        return None
+
+def test_agent(self, agent_name):
+    """
+    Test a newly created agent with optional backtest
+
+    Args:
+        agent_name (str): Name of the agent to test
+    """
+    # Need imports here as this function was moved
+    from utils.backtest_utils import backtest_results_manager
+    from utils.vectorbt_utils import simulate_trading_strategy
+    import pandas as pd
+
+    self.console.print(f"[yellow]Testing agent: {agent_name}[/yellow]")
+
+    # Load agent config to get necessary info for backtest (e.g., features, SL/TP)
+    config_manager = AgentConfigManager()
+    agent_config = config_manager.load_agent_config(agent_name)
+    if not agent_config:
+         self.console.print(f"[red]Could not load configuration for agent: {agent_name}[/red]")
+         return self.manage_agents_menu()
+
+    # Prompt for backtest with back option
+    choices = ["Yes, run backtest", "No, skip backtest", "Back to agent management"]
+    test_choice = questionary.select(
+        "Would you like to run a quick backtest?",
+        choices=choices
+    ).ask()
+
+    if test_choice == "Back to agent management":
+        return self.manage_agents_menu()
+    elif test_choice is None: # Handle Ctrl+C/EOF
+         raise KeyboardInterrupt
+
+    test_result = test_choice == "Yes, run backtest"
+
+    if test_result:
+        self.console.print("[green]Simulating backtest...[/green]")
+
+        # Select market data for backtest
+        # Need access to _select_market_data, assuming it exists via self
+        data_path = self._select_market_data()
+        if data_path == 'back' or data_path == 'cancel' or data_path is None:
+            # Go back to test options for this agent, not main menu
+            return self.test_agent(agent_name)
+
+
+        try:
+            # Load market data
+            market_data = pd.read_csv(data_path)
+            # Ensure datetime index
+            if 'date' in market_data.columns:
+                 market_data['date'] = pd.to_datetime(market_data['date'])
+                 market_data = market_data.set_index('date')
+            elif market_data.index.dtype != 'datetime64[ns]':
+                 market_data.index = pd.to_datetime(market_data.index)
+
+            # Calculate features needed by the agent's strategy (from config)
+            # This assumes calculate_all_features covers everything needed
+            # A more robust approach might load the agent and use its specific feature calculation
+            self.console.print("[yellow]Calculating features for backtest...[/yellow]")
+            # Need access to calculate_all_features, assuming imported
+            market_data_with_features = calculate_all_features(market_data.copy()) # Use copy to avoid modifying original df
+            self.console.print("[green]Features calculated.[/green]")
+
+
+            # Simulate trading strategy (placeholder signals based on config)
+            # --- THIS IS A CRITICAL PLACEHOLDER ---
+            # A real implementation needs to:
+            # 1. Load the agent's *actual* logic (or the saved model).
+            # 2. Generate entry/exit signals based on the agent's rules and the calculated features.
+            # For now, using simple MA cross as a generic placeholder.
+            self.console.print("[yellow]Generating placeholder signals (MA Cross)...[/yellow]")
+            # Ensure the feature columns exist before using them
+            if 'Close' not in market_data_with_features.columns:
+                 raise KeyError("Required column 'Close' not found in market data.")
+            # Example: Use SMA_20 if available, else fallback
+            ma_col = next((col for col in market_data_with_features.columns if 'SMA_20' in col), None)
+            if ma_col:
+                 entry_signals = market_data_with_features['Close'] > market_data_with_features[ma_col]
+                 exit_signals = market_data_with_features['Close'] < market_data_with_features[ma_col]
             else:
-                 self.console.print(f"[red]Failed to save agent configuration for '{save_name}'.[/red]")
+                 # Fallback if SMA_20 wasn't calculated or named differently
+                 self.console.print("[yellow]SMA_20 feature not found, using simple rolling mean(20) for placeholder signals.[/yellow]")
+                 entry_signals = market_data_with_features['Close'] > market_data_with_features['Close'].rolling(20).mean()
+                 exit_signals = market_data_with_features['Close'] < market_data_with_features['Close'].rolling(20).mean()
 
-        else:
-            self.console.print("[yellow]Changes discarded.[/yellow]")
-
-    # Loop back to edit options for the same agent unless deleted or backed out
-    return self.edit_agent_workflow()
-
-
-# Helper function for editing feature parameters within edit_agent_workflow
-def _edit_feature_params(self, features, current_params):
-     """Interactively edit parameters for a list of features."""
-     new_params = current_params.copy() # Start with existing params
-
-     for feature in features:
-          # Determine param type and default based on feature name (example)
-          param_type = 'window' if any(x in feature.lower() for x in ['sma', 'ema', 'rsi', 'macd', 'atr', 'bb']) else 'threshold'
-          default_val_dict = new_params.get(feature, {})
-          default_val = default_val_dict.get(param_type, "14" if 'rsi' in feature.lower() else "20") # Example defaults
-
-          is_valid_input = lambda x: (x.isdigit() and int(x) > 0) if param_type == 'window' else self._validate_float(x)
-
-          param_value = questionary.text(
-              f"Enter {param_type} for {feature} (current: {default_val}, or 'back' to skip):",
-              validate=lambda x: (is_valid_input(x)) or x.lower() == 'back',
-              default=str(default_val)
-          ).ask()
-
-          if param_value is None: raise KeyboardInterrupt
-          elif param_value.lower() == 'back':
-               continue # Skip to next feature
-
-          # Update the parameter if valid
-          try:
-               typed_value = int(param_value) if param_type == 'window' else float(param_value)
-               if feature not in new_params:
-                    new_params[feature] = {}
-               new_params[feature][param_type] = typed_value
-               self._update_selection(f"{feature} {param_type.title()}", typed_value)
-          except ValueError:
-               self.console.print(f"[red]Invalid numeric value entered for {feature}. Keeping previous value.[/red]")
-
-     return new_params
+            # --- END PLACEHOLDER ---
 
 
-def train_agent_interactive(self):
-    # 1. Select Agent to Train
-    agents_with_options = self._list_existing_agents() # Assuming this exists via self
+            # Run backtest simulation using vectorbt_utils
+            # Pass necessary parameters like initial capital, fees, etc.
+            # These could be part of agent_config or asked interactively.
+            # Get SL/TP/Size from agent_config or trade_generation_params if available
+            trade_gen_params = agent_config.get('trade_generation_params', {})
+            sl_pct = trade_gen_params.get('stop_loss_pct', agent_config.get('stop_loss_pct', None)) # Check both places
+            tp_pct = trade_gen_params.get('take_profit_pct', agent_config.get('take_profit_pct', None)) # Check both places
+            initial_capital = float(trade_gen_params.get('account_size', agent_config.get('account_size', 10000))) # Use config or default
+            fees = 0.001 # Example fee (0.1%) - make configurable?
+
+            self.console.print(f"Running vectorbt simulation (Initial Capital: ${initial_capital:,.2f}, Fees: {fees*100:.2f}%, SL: {sl_pct*100 if sl_pct else 'None'}%, TP: {tp_pct*100 if tp_pct else 'None'}%)...")
+
+
+            # Ensure signals are boolean type and aligned with price index
+            entry_signals = entry_signals.reindex(market_data_with_features.index).fillna(False).astype(bool)
+            exit_signals = exit_signals.reindex(market_data_with_features.index).fillna(False).astype(bool)
+
+
+            # Call the simulation function from vectorbt_utils
+            # Pass Close prices for simulation
+            portfolio = simulate_trading_strategy(
+                prices=market_data_with_features['Close'],
+                entries=entry_signals,
+                exits=exit_signals,
+                init_cash=initial_capital,
+                fees=fees,
+                sl_stop=sl_pct, # Pass SL percentage
+                tp_stop=tp_pct # Pass TP percentage
+            )
+
+            # Extract metrics from the portfolio object
+            backtest_metrics = {}
+            if portfolio is not None and hasattr(portfolio, 'stats'):
+                 stats_output = portfolio.stats()
+                 # Convert metrics to a simpler dict if needed
+                 if isinstance(stats_output, pd.Series):
+                      backtest_metrics = stats_output.to_dict()
+                 elif isinstance(stats_output, dict): # Handle if stats() returns a dict
+                      backtest_metrics = stats_output
+                 else: # Handle unexpected type
+                      self.console.print(f"[yellow]Unexpected type from portfolio.stats(): {type(stats_output)}[/yellow]")
+                      backtest_metrics = {'result': str(stats_output)}
+            elif portfolio is not None and isinstance(portfolio, dict) and 'metrics' in portfolio: # Check if it returned a dict with metrics
+                 backtest_metrics = portfolio['metrics']
+            else:
+                 self.console.print("[yellow]Could not extract standard metrics from backtest result or backtest failed.[/yellow]")
+                 backtest_metrics = {'Status': 'Backtest Failed or No Trades'}
+
+
+            # Save and generate shareable link using backtest_utils
+            result_link = backtest_results_manager.save_backtest_results(
+                backtest_metrics, # Pass the extracted metrics dictionary
+                agent_name
+            )
+
+            # Display results and link
+            self.console.print("[green]Backtest Completed![/green]")
+            # Display metrics in a table for better readability
+            stats_table = Table(title=f"Backtest Metrics: {agent_name}")
+            stats_table.add_column("Metric", style="cyan")
+            stats_table.add_column("Value", style="green")
+            for key, value in backtest_metrics.items():
+                 # Basic formatting for common metrics
+                 if isinstance(value, (int, float)):
+                      if 'Rate' in key or 'Ratio' in key or 'Factor' in key or 'Drawdown' in key or 'Duration' in key:
+                           value_str = f"{value:.2f}"
+                      elif 'Return' in key or '%' in key or 'Percent' in key:
+                           # Handle potential NaNs or Infs before formatting
+                           value_str = f"{value*100:.2f}%" if pd.notna(value) and np.isfinite(value) else str(value)
+                      elif 'Cash' in key or 'Equity' in key or 'Value' in key:
+                           value_str = f"${value:,.2f}" if pd.notna(value) and np.isfinite(value) else str(value)
+                      else:
+                           value_str = f"{value:.4f}" if pd.notna(value) and np.isfinite(value) else str(value)
+
+                 else:
+                      value_str = str(value)
+                 stats_table.add_row(key.replace('_', ' ').title(), value_str)
+            self.console.print(stats_table)
+
+            self.console.print(f"[blue]Backtest Results Link: {result_link}[/blue]")
+
+            # Optional: Open results
+            open_results = questionary.confirm("Would you like to open the backtest results?").ask()
+            if open_results is None: raise KeyboardInterrupt
+            if open_results:
+                backtest_results_manager.open_backtest_results(result_link)
+
+        except FileNotFoundError:
+             self.console.print(f"[red]Error: Market data file not found at {data_path}[/red]")
+        except KeyError as e:
+             self.console.print(f"[red]Backtest failed: Missing data column - {e}. Ensure data has 'Open', 'High', 'Low', 'Close', 'Volume' and required features.[/red]")
+             import traceback
+             self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        except Exception as e:
+            self.console.print(f"[red]Backtest failed: {e}[/red]")
+            import traceback
+            self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+    # Go back to the main agent management menu after testing
+    return self.manage_agents_menu()
+
+
+def _display_agent_config_summary(self, agent_config):
+    """
+    Display a summarized view of agent configuration
+
+    Args:
+        agent_config (dict): Agent configuration dictionary
+    """
+    if not agent_config:
+        self.console.print("[yellow]No agent configuration provided.[/yellow]")
+        return
+
+    agent_name = agent_config.get('agent_name', 'Unknown Agent')
+    table = Table(title=f"Agent Configuration: {agent_name}", show_header=False, box=None)
+    table.add_column("Parameter", style="cyan", no_wrap=True, width=25)
+    table.add_column("Value", style="green")
+
+    # Define order or key parameters
+    key_params = ['agent_type', 'strategy', 'features', 'feature_params', 'market_data', 'synthetic_trades_path', 'risk_reward_ratio', 'stop_loss_pct', 'take_profit_pct', 'account_size', 'trade_size']
+    displayed_keys = set(['agent_name']) # Keep track of displayed keys
+
+    # Populate key parameters first
+    for key in key_params:
+        if key in agent_config:
+            value = agent_config[key]
+            displayed_keys.add(key)
+            title = key.replace('_', ' ').title()
+
+            if key == 'features':
+                value_str = ", ".join(value) if value else "None"
+                table.add_row(title, value_str)
+            elif key == 'feature_params':
+                if value:
+                    table.add_row(f"[bold]{title}[/bold]", "") # Header for section
+                    for feature, params in value.items():
+                        param_str = ", ".join([f"{k}: {v}" for k, v in params.items()])
+                        table.add_row(f"  {feature}", param_str)
+                else:
+                    table.add_row(title, "None")
+            elif key in ['stop_loss_pct', 'take_profit_pct']:
+                 value_str = f"{value*100:.2f}%" if isinstance(value, (int, float)) else str(value)
+                 table.add_row(title, value_str)
+            elif key in ['account_size', 'trade_size']:
+                 value_str = f"${value:,.2f}" if isinstance(value, (int, float)) else str(value)
+                 table.add_row(title, value_str)
+            elif key == 'synthetic_trades_path' and value:
+                 # Shorten the path for display
+                 value_str = os.path.basename(value)
+                 table.add_row(title, value_str)
+            else:
+                table.add_row(title, str(value))
+
+
+    # Add other parameters not explicitly listed
+    other_params = {k: v for k, v in agent_config.items() if k not in displayed_keys}
+    if other_params:
+         table.add_row("[bold]--- Other Params ---[/bold]", "") # Separator
+         for key, value in other_params.items():
+              title = key.replace('_', ' ').title()
+              if isinstance(value, dict): # Don't display complex dicts directly
+                   value_str = f"{len(value)} items"
+              elif isinstance(value, list):
+                   value_str = f"{len(value)} items"
+              else:
+                   value_str = str(value)
+              table.add_row(title, value_str)
+
+    self.console.print(table)
     # Filter out non-agent options for training selection
     agent_choices = [agent for agent in agents_with_options if agent not in ['Create New Agent', 'Back']]
     if not agent_choices:
