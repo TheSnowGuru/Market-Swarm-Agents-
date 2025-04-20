@@ -509,7 +509,6 @@ def main():
     # Call setup_logging here to configure logging using the utility function
     setup_logging() # Use the imported setup function
     logger = logging.getLogger(__name__) # Get logger after setup
-    logger.info("Starting SWARM Trading System CLI...")
 
     try:
         cli = SwarmCLI()
