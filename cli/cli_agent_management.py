@@ -392,16 +392,27 @@ def create_new_strategy_workflow(self, agent_name):
     self.console.print("[italic]You will be prompted for simulation parameters (SL/TP, Size).[/italic]")
 
     # Call the agent-specific trade generation workflow
-    # Unpack the tuple (path, config) - config is ignored here
-    trades_path, _ = self.generate_synthetic_trades_for_agent( # UNPACK TUPLE
+    # It returns a tuple (path, config) or (None, None)
+    generation_result = self.generate_synthetic_trades_for_agent( # Assign result first
         agent_name=agent_name,
         features=self._selected_features, # Pass the selected features to be recorded
         market_data_path=market_data_path
     )
 
-    if not trades_path:
+    # --- Check result before unpacking ---
+    if generation_result is None or generation_result[0] is None:
          self.console.print("[red]Failed to generate base trade data. Strategy creation aborted.[/red]")
+         return None # Abort strategy creation
+    else:
+         # Unpack only if successful
+         trades_path, _ = generation_result # We only need the path here
+    # --- End check ---
+
+    # Check if trades_path is actually valid (it might be None even if generation_result wasn't None, e.g., save failed)
+    if not trades_path:
+         self.console.print("[red]Trade data generation completed but file path is missing. Strategy creation aborted.[/red]")
          return None
+
 
     # 4. Strategy Placeholder Creation
     timestamp = pd.Timestamp.now().strftime('%Y%m%d%H%M')
