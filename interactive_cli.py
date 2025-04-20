@@ -4,6 +4,14 @@ import logging
 import pandas as pd
 import numpy as np
 import warnings # <-- ADD THIS IMPORT
+
+
+# --- ADD WARNING FILTER ---
+# Suppress the specific vectorbt settings warning if it's just noise
+warnings.filterwarnings("ignore", message="Could not configure vectorbt settings: 'active'")
+# --- END WARNING FILTER ---
+
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
