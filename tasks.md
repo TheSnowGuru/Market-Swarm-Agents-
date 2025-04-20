@@ -14,7 +14,7 @@
   - [x] Generate synthetic trades data df (Buy/Sell entry/exit, SL/TP, results, indicator values at entry/exit) using vectorbt simulation.
   - [x] Use `numba` with `vectorbt` for fast processing (inherent in vectorbt usage).
   - [x] Apply SL/TP with configurable RR threshold (via CLI prompts and vectorbt parameters).
-  - [ ] Track trade exit and save winning trades in CSV (Saving all trades implemented; filtering winning trades handled in analysis workflow, generator-level filtering needs review).
+  - [ ] save trades and save trades in CSV (Saving all trades implemented; filtering winning trades handled in analysis workflow, generator-level filtering needs review).
   - [x] Set configurable account size and trade size via CLI prompts.
   - [x] Record indicator values at trade entry/exit points in the trades DataFrame.
   - [x] Compute comprehensive trade metrics (PnL %, duration, drawdown, etc.) using vectorbt's `Portfolio.stats()`.
