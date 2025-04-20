@@ -8,6 +8,7 @@ import numpy as np
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich import print as rprint # Added for pretty printing dicts
 try:
     import questionary
     # Assuming questionary patches are applied in interactive_cli.py
@@ -105,42 +106,121 @@ def generate_synthetic_trades_for_agent(self, agent_name, features, market_data_
     ).ask()
     if trade_size is None: return None # Handle Ctrl+C/EOF
 
-    # Generate entry/exit conditions based on selected features
+    # --- Enhanced Default Condition Generation ---
     entry_conditions = {}
     exit_conditions = {}
-
-    # Create default conditions based on selected features
-    # This logic might need refinement based on actual feature names from feature_extractor_vectorbt
     all_available_features = get_available_features() # Get all possible features for checks
+    selected_features_lower = [f.lower() for f in features] # Lowercase list for easier checks
+
+    self.console.print("[yellow]Generating default entry/exit conditions based on selected features...[/yellow]")
+
+    # Check for MACD Line/Signal cross first if both are selected
+    macd_line_feature = next((f for f in features if 'macd' in f.lower() and 'signal' not in f.lower() and 'hist' not in f.lower()), None)
+    macd_signal_feature = next((f for f in features if 'macd_signal' in f.lower()), None)
+
+    if macd_line_feature and macd_signal_feature:
+        self.console.print(f"- Found MACD Line ({macd_line_feature}) and Signal ({macd_signal_feature}). Adding cross condition.")
+        entry_conditions[macd_line_feature] = {'cross_above_col': macd_signal_feature}
+        exit_conditions[macd_line_feature] = {'cross_below_col': macd_signal_feature}
+
+    # Iterate through features for other defaults
     for feature in features:
         feature_lower = feature.lower()
-        if 'rsi' in feature_lower: # Make comparison case-insensitive
-            entry_conditions[feature] = {'below': 30}
-            exit_conditions[feature] = {'above': 70}
-        elif 'macd_hist' in feature_lower: # Check for specific hist column if generated
-            entry_conditions[feature] = {'cross_above': 0}
-            exit_conditions[feature] = {'cross_below': 0}
-        elif 'macd' in feature_lower and 'signal' not in feature_lower and 'hist' not in feature_lower: # Check for MACD line itself
-             # Example: MACD crosses above signal line (requires signal line feature)
-             # Find the actual signal line feature name
-             signal_feature = next((f for f in all_available_features if 'macd' in f.lower() and 'signal' in f.lower()), None)
-             if signal_feature and signal_feature in features: # Check if signal line is also selected
-                 entry_conditions[feature] = {'cross_above_col': signal_feature}
-                 exit_conditions[feature] = {'cross_below_col': signal_feature}
-        elif 'bbl' in feature_lower or 'bb_lower' in feature_lower: # Check for lower band
-            entry_conditions[feature] = {'below_col': 'Low'} # Example: Low crosses below lower band
-        elif 'bbu' in feature_lower or 'bb_upper' in feature_lower: # Check for upper band
-             exit_conditions[feature] = {'above_col': 'High'} # Example: High crosses above upper band
+
+        # Skip MACD line/signal if already handled by the cross condition
+        if feature == macd_line_feature or feature == macd_signal_feature:
+            continue
+
+        # --- Oscillators (Prompt for Levels) ---
+        if 'rsi' in feature_lower:
+            self.console.print(f"- Configuring default levels for [cyan]{feature}[/cyan]:")
+            rsi_entry_level = questionary.text(
+                f"  Enter RSI level to buy below (e.g., 30):",
+                validate=lambda x: self._validate_float(x, 0, 100),
+                default="30"
+            ).ask()
+            if rsi_entry_level is None: return None # Handle cancel
+            rsi_exit_level = questionary.text(
+                f"  Enter RSI level to sell above (e.g., 70):",
+                validate=lambda x: self._validate_float(x, 0, 100),
+                default="70"
+            ).ask()
+            if rsi_exit_level is None: return None # Handle cancel
+            entry_conditions[feature] = {'below': float(rsi_entry_level)}
+            exit_conditions[feature] = {'above': float(rsi_exit_level)}
+
+        elif 'macd_hist' in feature_lower:
+            self.console.print(f"- Configuring default levels for [cyan]{feature}[/cyan]:")
+            hist_entry_level = questionary.text(
+                f"  Enter MACD Hist level to buy on cross above (e.g., 0):",
+                validate=lambda x: self._validate_float(x, -np.inf, np.inf),
+                default="0"
+            ).ask()
+            if hist_entry_level is None: return None # Handle cancel
+            hist_exit_level = questionary.text(
+                f"  Enter MACD Hist level to sell on cross below (e.g., 0):",
+                validate=lambda x: self._validate_float(x, -np.inf, np.inf),
+                default="0"
+            ).ask()
+            if hist_exit_level is None: return None # Handle cancel
+            entry_conditions[feature] = {'cross_above': float(hist_entry_level)}
+            exit_conditions[feature] = {'cross_below': float(hist_exit_level)}
+
+        # --- Moving Averages (Price Cross) ---
         elif 'sma' in feature_lower or 'ema' in feature_lower:
-            entry_conditions[feature] = {'cross_above_col': 'Close'} # Example: Close crosses above MA
-            exit_conditions[feature] = {'cross_below_col': 'Close'} # Example: Close crosses below MA
+            self.console.print(f"- Adding Price Cross condition for [cyan]{feature}[/cyan].")
+            entry_conditions[feature] = {'cross_above_col': 'Close'}
+            exit_conditions[feature] = {'cross_below_col': 'Close'}
 
-    # Allow user to customize conditions
-    customize_conditions = questionary.confirm(
-        "Would you like to customize entry/exit conditions?", default=False
-    ).ask()
-    if customize_conditions is None: return None # Handle Ctrl+C/EOF
+        # --- Bands (Price Cross) ---
+        elif 'bbl' in feature_lower or 'bb_lower' in feature_lower:
+            self.console.print(f"- Adding Price Cross condition for [cyan]{feature}[/cyan].")
+            entry_conditions[feature] = {'below_col': 'Low'} # Example: Enter when Low drops below Lower Band
 
+        elif 'bbu' in feature_lower or 'bb_upper' in feature_lower:
+            self.console.print(f"- Adding Price Cross condition for [cyan]{feature}[/cyan].")
+            exit_conditions[feature] = {'above_col': 'High'} # Example: Exit when High goes above Upper Band
+
+        # --- Other Indicators (No simple default signal) ---
+        elif 'atr' in feature_lower:
+             self.console.print(f"- Skipping default signal condition for [cyan]{feature}[/cyan] (used for SL/TP/sizing).")
+        elif 'obv' in feature_lower:
+             self.console.print(f"- Skipping default signal condition for [cyan]{feature}[/cyan] (complex usage).")
+        elif 'bb_middle' in feature_lower or 'bb_percent_b' in feature_lower:
+             self.console.print(f"- Skipping default signal condition for [cyan]{feature}[/cyan] (use Bands or customize).")
+        # Add elif for other specific indicators if needed
+
+    # Initialize customize_conditions flag before potentially setting it
+    customize_conditions = False
+
+    if not entry_conditions and not exit_conditions:
+         self.console.print("[red]Warning: No default entry or exit conditions could be generated for the selected features.[/red]")
+         # Ask user if they want to configure manually or cancel
+         configure_manually = questionary.confirm(
+              "No default conditions generated. Configure manually now?", default=True
+         ).ask()
+         if configure_manually is None: return None
+         if not configure_manually: return None # Cancel trade generation
+         # Set customize_conditions to True to trigger manual config below
+         customize_conditions = True
+    else:
+         self.console.print("[green]Default conditions generated.[/green]")
+         # Display generated default conditions
+         self.console.print("[bold]Default Entry Conditions:[/bold]")
+         rprint(entry_conditions)
+         self.console.print("[bold]Default Exit Conditions:[/bold]")
+         rprint(exit_conditions)
+         # Ask user if they want to customize *these* generated conditions
+         customize_conditions = questionary.confirm(
+             "Would you like to customize these entry/exit conditions?", default=False
+         ).ask()
+         if customize_conditions is None: return None # Handle Ctrl+C/EOF
+
+
+    # --- End Enhanced Default Condition Generation ---
+
+    # Allow user to customize conditions (This part remains the same)
+    # Note: The customize_conditions variable is now set based on the logic above
     if customize_conditions:
         self.console.print("[yellow]Configuring entry conditions...[/yellow]")
         entry_conditions = self._configure_trade_conditions("entry") # Call via self
