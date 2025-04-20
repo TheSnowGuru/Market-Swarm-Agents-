@@ -868,6 +868,7 @@ def train_agent_interactive(self):
          self.console.print("[yellow]No agents available to train. Create an agent first.[/yellow]")
          return self.manage_agents_menu() # Or agent_management_menu?
 
+    # Continue with the correct logic for train_agent_interactive
     agent_choices.append('Back')
     selected_agent = questionary.select(
         "Select agent to train:",
