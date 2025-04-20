@@ -22,7 +22,7 @@ from utils.vectorbt_utils import simulate_trading_strategy # Needed for test_age
 from rich import print as rprint # For better dict printing
 
 # Import trade generation functions needed by agent workflows
-from .cli_trade_generation import generate_synthetic_trades_for_agent, _display_trade_statistics, _configure_trade_conditions
+from .cli_trade_generation import generate_synthetic_trades_for_agent, _display_trade_statistics
 # Import trade analysis functions needed by agent workflows
 from .cli_trade_analysis import trade_analysis_menu, filter_trades_workflow # Assuming these might be called
 
@@ -33,125 +33,8 @@ from .cli_trade_analysis import trade_analysis_menu, filter_trades_workflow # As
 
 # === PASTE THE CUT FUNCTIONS BELOW THIS LINE ===
 
-def strategy_management_menu(self):
-    # Dynamic menu based on current strategy development stage
-    stages = []
-
-    if not self.current_context['data_file']:
-        stages.append("Start New Strategy")
-
-    if self.current_context['data_file'] and not self.current_context['profit_threshold']:
-        stages.append("Configure Profit Threshold")
-
-    if self.current_context['profit_threshold'] and not self.current_context['stop_loss']:
-        stages.append("Configure Stop Loss")
-
-    stages.extend([
-        "Review Current Strategy",
-        "Save Strategy",
-        "Back to Main Menu"
-    ])
-
-    choice = questionary.select(
-        "Strategy Management:",
-        choices=stages
-    ).ask()
-
-    # Map choices to appropriate methods
-    menu_actions = {
-        "Start New Strategy": self.generate_strategy_interactive,
-        "Configure Profit Threshold": self._configure_profit_threshold,
-        "Configure Stop Loss": self._configure_stop_loss,
-        "Review Current Strategy": self._review_strategy_config,
-        "Save Strategy": self._save_strategy,
-        "Back to Main Menu": self.main_menu
-    }
-
-    menu_actions[choice]()
-
-def generate_strategy_interactive(self):
-    # Dynamic menu flow with clear steps
-    steps = [
-        self._select_market_data,
-        self._configure_profit_threshold,
-        self._configure_stop_loss,
-        self._review_strategy_config,
-        self._save_or_continue
-    ]
-
-    for step in steps:
-        result = step()
-        if result == 'back':
-            return self.strategy_management_menu()
-        if result == 'cancel':
-            self._reset_context()
-            return self.main_menu()
-
-def _configure_profit_threshold(self):
-    # Contextual input with navigation
-    profit_threshold = questionary.text(
-        f"Configure profit threshold for {self.current_context['data_file']} (0.01-1.0) or 'back' to return:",
-        validate=lambda x: self._validate_float(x, 0, 1, param_type='profit_threshold') or x.lower() == 'back',
-        default=str(self.current_context.get('profit_threshold', '0.02'))
-    ).ask()
-
-    if profit_threshold.lower() == 'back':
-        return 'back'
-
-    self.current_context['profit_threshold'] = float(profit_threshold)
-    return 'continue'
-
-def _configure_stop_loss(self):
-    stop_loss = questionary.text(
-        f"Configure stop loss for {self.current_context['data_file']} (0.01-0.05) or 'back' to return:",
-        validate=lambda x: self._validate_float(x, 0, 0.05, param_type='stop_loss') or x.lower() == 'back',
-        default=str(self.current_context.get('stop_loss', '0.01'))
-    ).ask()
-
-    if stop_loss.lower() == 'back':
-        return 'back'
-
-    self.current_context['stop_loss'] = float(stop_loss)
-    return 'continue'
-
-def _review_strategy_config(self):
-    self.console.print("[bold]Current Strategy Configuration:[/bold]")
-    for key, value in self.current_context.items():
-        if value is not None:
-            self.console.print(f"- {key.replace('_', ' ').title()}: {value}")
-
-    choices = ["Yes, continue", "No, go back", "Cancel"]
-    response = questionary.select(
-        "Are you satisfied with this configuration?",
-        choices=choices
-    ).ask()
-
-    if response == "Yes, continue":
-        return 'continue'
-    elif response == "No, go back":
-        return 'back'
-    else:
-        return 'cancel'
-
-def _save_or_continue(self):
-    choices = ['Save Strategy', 'Continue Editing', 'Back to Main Menu']
-    choice = questionary.select(
-        "What would you like to do?",
-        choices=choices
-    ).ask()
-
-    if choice == 'Save Strategy':
-        self._save_strategy()
-        return 'continue'
-    elif choice == 'Continue Editing':
-        return 'back'
-    else:
-        self._reset_context()
-        self.main_menu()
-        return 'cancel'
-
 def _save_strategy(self, strategy_name=None, market_data=None, profit_threshold=None,
-                   stop_loss=None, features=None, derived_parameters=None, backtest_results=None): # Add derived_parameters
+                   stop_loss=None, features=None, base_trades_file=None, backtest_results=None): # MODIFIED arguments
     """
     Save strategy configuration with optional detailed parameters
 
@@ -161,16 +44,15 @@ def _save_strategy(self, strategy_name=None, market_data=None, profit_threshold=
         profit_threshold (float, optional): Profit threshold (Maybe less relevant now?)
         stop_loss (float, optional): Stop loss threshold (Maybe less relevant now?)
         features (list, optional): Selected features
-        derived_parameters (dict, optional): Parameters derived from synthetic trades
+        base_trades_file (str, optional): Path to the base generated trades file
         backtest_results (list, optional): Backtest trade results
     """
     strategy_config = {
         'name': strategy_name or 'default_strategy',
         'market_data': market_data,
-        # 'profit_threshold': profit_threshold, # Consider if these are still needed
-        # 'stop_loss': stop_loss,
         'features': features,
-        'derived_parameters': derived_parameters, # Save the derived params
+        'base_trades_file': base_trades_file, # Store link to trades
+        # 'derived_parameters': derived_parameters, # REMOVED
         'backtest_results': backtest_results # Placeholder
     }
 
@@ -369,43 +251,6 @@ def _derive_params_from_synthetic_trades(self, winning_trades_df, features):
     derived_params['median_win_pnl'] = winning_trades_df['pnl_pct'].median()
     derived_params['avg_win_duration'] = winning_trades_df['duration'].mean()
 
-    return derived_params
-
-
-def agent_management_menu(self):
-    choices = [
-        "List Available Agents",
-        "Configure Agent", # Should likely map to edit_agent_workflow
-        "Train Agent", # Should map to train_agent_interactive
-        "Create New Agent", # Should map to create_agent_workflow
-        "Back to Main Menu"
-    ]
-
-    choice = questionary.select(
-        "Agent Management:",
-        choices=choices
-    ).ask()
-
-    if choice == "List Available Agents":
-        # Call the listing function which now resides here
-        self._list_existing_agents() # Display happens within the function
-        # Return to agent management menu after displaying agents
-        return self.agent_management_menu() # Loop back
-    elif choice == "Configure Agent":
-         # This should likely be the "Edit Agent" workflow
-         return self.edit_agent_workflow()
-    elif choice == "Train Agent":
-        return self.train_agent_interactive()
-    elif choice == "Create New Agent":
-        # Call the create workflow which now resides here
-        return self.create_agent_workflow()
-    elif choice == "Back to Main Menu":
-        # Need access to main_menu, assuming it's passed or accessible via self
-        return self.main_menu()
-    elif choice is None: # Handle Ctrl+C/EOF
-         raise KeyboardInterrupt
-
-
 def manage_agents_menu(self):
     choices = [
         "Create Agent",
@@ -576,7 +421,8 @@ def create_agent_workflow(self):
 
     if generate_trades:
         # Use the same market data and features to generate synthetic trades
-        self.console.print(f"[yellow]Generating synthetic trades for {agent_name}...[/yellow]")
+        self.console.print(f"[yellow]Generating base synthetic trades dataset for {agent_name}...[/yellow]")
+        self.console.print("[italic]You will be prompted for simulation parameters (SL/TP, Size).[/italic]")
 
         # Get market data path using the method assumed to be on self
         market_data_path = self._select_market_data()
@@ -589,191 +435,26 @@ def create_agent_workflow(self):
              self._update_selection("Generate Trades", "No")
              output_path = None # Ensure output_path is None if trades not generated
         else:
-            # Configure trade generation parameters
-            self.console.print("[bold]Configure Synthetic Trade Parameters:[/bold]")
-
-            # Configure risk/reward parameters
-            rr_ratio = questionary.text(
-                "Enter risk/reward ratio (e.g., 2.0 means TP is 2x SL):",
-                validate=lambda x: self._validate_float(x, 0.1, 10), # Assuming _validate_float exists via self
-                default="2.0"
-            ).ask()
-            if rr_ratio is None: raise KeyboardInterrupt
-
-            self._update_selection("Risk/Reward Ratio", rr_ratio) # Assuming _update_selection exists via self
-
-            stop_loss = questionary.text(
-                "Enter stop loss percentage (e.g., 0.01 for 1%):",
-                validate=lambda x: self._validate_float(x, 0.001, 0.1), # Assuming _validate_float exists via self
-                default="0.01"
-            ).ask()
-            if stop_loss is None: raise KeyboardInterrupt
-
-            self._update_selection("Stop Loss", f"{float(stop_loss)*100:.2f}%") # Assuming _update_selection exists via self
-
-            # Calculate take profit based on RR ratio
-            take_profit = float(stop_loss) * float(rr_ratio)
-            self._update_selection("Take Profit", f"{take_profit*100:.2f}%") # Assuming _update_selection exists via self
-
-            # Configure account and trade size
-            account_size = questionary.text(
-                "Enter account size in dollars:",
-                validate=lambda x: self._validate_float(x, 100, 10000000), # Assuming _validate_float exists via self
-                default="10000"
-            ).ask()
-            if account_size is None: raise KeyboardInterrupt
-
-            self._update_selection("Account Size", f"${float(account_size):,.2f}") # Assuming _update_selection exists via self
-
-            trade_size = questionary.text(
-                "Enter trade size in dollars (can be larger than account for leverage):",
-                validate=lambda x: self._validate_float(x, 100, 10000000), # Assuming _validate_float exists via self
-                default="100000"
-            ).ask()
-            if trade_size is None: raise KeyboardInterrupt
-
-            self._update_selection("Trade Size", f"${float(trade_size):,.2f}") # Assuming _update_selection exists via self
-
-            # Generate entry/exit conditions based on selected features
-            entry_conditions = {}
-            exit_conditions = {}
-
-            # Create default conditions based on selected features
-            # This needs access to the calculated features dataframe later
-            # For now, just define the structure based on feature names
-            for feature in features:
-                if 'rsi' in feature.lower():
-                    entry_conditions[feature] = {'below': 30}
-                    exit_conditions[feature] = {'above': 70}
-                elif 'macd_hist' in feature.lower(): # Check for specific calculated columns
-                    entry_conditions[feature] = {'cross_above': 0}
-                    exit_conditions[feature] = {'cross_below': 0}
-                elif 'bbl' in feature.lower(): # Check for specific calculated columns
-                    entry_conditions[feature] = {'below_col': 'Low'} # Example: price crosses below lower band
-                elif 'bbu' in feature.lower(): # Check for specific calculated columns
-                     exit_conditions[feature] = {'above_col': 'High'} # Example: price crosses above upper band
-                elif any(x in feature.lower() for x in ['sma', 'ema']):
-                    entry_conditions[feature] = {'cross_above_col': 'Close'} # Example: Close crosses above MA
-                    exit_conditions[feature] = {'cross_below_col': 'Close'} # Example: Close crosses below MA
-
-            # Allow user to customize conditions
-            customize_conditions = questionary.confirm(
-                "Would you like to customize entry/exit conditions?"
-            ).ask()
-            if customize_conditions is None: raise KeyboardInterrupt
-
-            if customize_conditions:
-                self.console.print("[yellow]Configuring entry conditions...[/yellow]")
-                # Need access to _configure_trade_conditions, assuming it exists via self
-                entry_conditions = self._configure_trade_conditions("entry")
-
-                self.console.print("[yellow]Configuring exit conditions...[/yellow]")
-                # Need access to _configure_trade_conditions, assuming it exists via self
-                exit_conditions = self._configure_trade_conditions("exit")
-
-            # Configure additional parameters
-            save_winning_only = questionary.confirm(
-                "Save only winning trades?"
-            ).ask()
-            if save_winning_only is None: raise KeyboardInterrupt
-
-            min_profit = "0.0"
-            if save_winning_only:
-                min_profit = questionary.text(
-                    "Minimum profit percentage to consider a winning trade:",
-                    validate=lambda x: self._validate_float(x, 0, 100), # Assuming _validate_float exists via self
-                    default="0.0"
-                ).ask()
-                if min_profit is None: raise KeyboardInterrupt
-
-            # Generate trades
-            self.console.print("[bold green]Generating synthetic trades...[/bold green]")
-
-            try:
-                # Load market data
-                df = pd.read_csv(market_data_path)
-                # Ensure datetime index
-                if 'date' in df.columns:
-                     df['date'] = pd.to_datetime(df['date'])
-                     df = df.set_index('date')
-                elif df.index.dtype != 'datetime64[ns]':
-                     df.index = pd.to_datetime(df.index)
-
-                # Calculate ALL features needed for conditions and analysis
-                # This assumes calculate_all_features is imported and available
-                self.console.print("[yellow]Calculating features for trade generation...[/yellow]")
-                df = calculate_all_features(df, selected_features=features)
-                self.console.print("[green]Features calculated.[/green]")
+            # Call the agent-specific trade generation workflow
+            # This workflow now handles the generation of all trades + feature recording
+            # It will prompt for SL/TP/Size internally
+            output_path = self.generate_synthetic_trades_for_agent(
+                agent_name=agent_name,
+                features=features, # Pass the selected features to be recorded
+                market_data_path=market_data_path
+            )
+            if not output_path:
+                 self.console.print("[red]Failed to generate base trade data.[/red]")
+                 # Decide how to proceed - maybe ask user? For now, continue agent creation without trades path.
+                 generate_trades = False
+                 self._update_selection("Generate Trades", "No")
 
 
-                # Configure trade generator
-                # Need to import SyntheticTradeGenerator
-                from utils.synthetic_trade_generator import SyntheticTradeGenerator
-                gen_config = {
-                    'risk_reward_ratio': float(rr_ratio),
-                    'stop_loss_pct': float(stop_loss),
-                    'take_profit_pct': take_profit,
-                    'save_winning_only': save_winning_only,
-                    'min_profit_threshold': float(min_profit),
-                    'account_size': float(account_size),
-                    'trade_size': float(trade_size)
-                }
-
-                generator = SyntheticTradeGenerator(gen_config)
-
-                # Generate trades
-                trades_df = generator.generate_trades(df, entry_conditions, exit_conditions)
-
-                if trades_df is None or len(trades_df) == 0:
-                    self.console.print("[red]No trades were generated with the given parameters.[/red]")
-                    output_path = None # Ensure output_path is None
-                else:
-                    # Display trade statistics
-                    stats = generator.get_trade_statistics()
-                    # Need access to _display_trade_statistics, assuming it exists via self
-                    self._display_trade_statistics(stats)
-
-                    # Save trades with agent name in filename
-                    save_trades = questionary.confirm("Save generated trades to CSV?").ask()
-                    if save_trades is None: raise KeyboardInterrupt
-
-                    if save_trades:
-                        # Create directory if it doesn't exist
-                        os.makedirs('data/synthetic_trades', exist_ok=True)
-
-                        # Generate filename with agent name
-                        timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-                        filename = f'{agent_name}_trades_{timestamp}.csv'
-
-                        output_path = generator.save_trades(filename=filename)
-                        self.console.print(f"[green]Trades saved to: {output_path}[/green]")
-
-                        # Store the path in the agent configuration that will be saved later
-                        # agent_config['synthetic_trades_path'] = output_path # Moved after generate_agent_config
-                    else:
-                         output_path = None # Ensure output_path is None if not saved
-
-            except FileNotFoundError:
-                 self.console.print(f"[red]Error: Market data file not found at {market_data_path}[/red]")
-                 # Decide how to handle - maybe go back?
-                 return self.create_agent_workflow()
-            except KeyError as e:
-                 self.console.print(f"[red]Error generating trades: Missing column {e}. Ensure data has required columns and features were calculated.[/red]")
-                 import traceback
-                 self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-                 # Go back
-                 return self.create_agent_workflow()
-            except Exception as e:
-                self.console.print(f"[red]Error generating synthetic trades: {e}[/red]")
-                import traceback
-                self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
-                # Go back
-                return self.create_agent_workflow()
     else: # If not generating trades
          output_path = None # Ensure output_path is None
          market_data_path = None # Ensure market_data_path is None if not generated
 
-    # 6. Automatic Training (Placeholder)
+    # --- Assemble Agent Configuration ---
     self.console.print(f"[yellow]Automatically training {agent_name}...[/yellow]")
 
     # --- Assemble Agent Configuration ---
@@ -860,53 +541,67 @@ def create_agent_workflow(self):
         return self.manage_agents_menu()
 
 def create_new_strategy_workflow(self, agent_name):
+    """
+    Workflow to associate features with a strategy idea and generate
+    the base trade data for later analysis.
+    """
     # 1. Select Market Data
-    # Need access to _select_market_data, assuming it exists via self
-    market_data_path = self._select_market_data()
-
+    market_data_path = self._select_market_data() # Call via self
     if market_data_path == 'back' or market_data_path == 'cancel' or market_data_path is None:
-        return None
+        return None # Cancelled
 
-    # 2. Interactive Feature Selection and Trade Labeling
-    # Call the function directly as it's in the same module
-    # Pass 'self' explicitly because the function needs it to call other bound methods
-    # This function now generates trades and derives params automatically
-    strategy_config_details = _select_and_label_features(self, market_data_path) # Call helper directly
+    # 2. Select Features to Associate with this Strategy/Agent
+    available_features = get_available_features()
+    if not available_features:
+         self.console.print("[red]Error: No features available from feature extractor.[/red]")
+         return None
 
-    if strategy_config_details is None:
-        return None # User likely backed out or process failed
+    # Use self._selected_features to store selection for the calling function (create_agent_workflow)
+    self._selected_features = questionary.checkbox(
+         f"Select features to associate with agent '{agent_name}' (these will be recorded in generated trades):",
+         choices=available_features,
+         default=[f for f in ['rsi', 'macd_hist', 'sma_20', 'ema_20'] if f in available_features] # Suggest common ones
+    ).ask()
+    if not self._selected_features:
+         self.console.print("[yellow]No features selected. Cannot create strategy base.[/yellow]")
+         return None
+    self._update_selection("Strategy Features", self._selected_features)
 
-    # 3. Extract Strategy Parameters
-    features = strategy_config_details['features']
-    # The derived parameters are now nested inside 'strategy_params'
-    strategy_params = strategy_config_details.get('strategy_params', {}) # Use .get for safety
+    # 3. Generate Base Trade Data
+    self.console.print(f"\n[yellow]Now generating the base trade dataset for '{agent_name}' using market data '{os.path.basename(market_data_path)}' and recording selected features.[/yellow]")
+    self.console.print("[italic]You will be prompted for simulation parameters (SL/TP, Size).[/italic]")
 
-    # 4. Generate Strategy Name
+    # Call the agent-specific trade generation workflow
+    trades_path = self.generate_synthetic_trades_for_agent(
+        agent_name=agent_name,
+        features=self._selected_features, # Pass the selected features to be recorded
+        market_data_path=market_data_path
+    )
+
+    if not trades_path:
+         self.console.print("[red]Failed to generate base trade data. Strategy creation aborted.[/red]")
+         return None
+
+    # 4. Strategy Placeholder Creation
     timestamp = pd.Timestamp.now().strftime('%Y%m%d%H%M')
     strategy_name = f"{agent_name}_strategy_{timestamp}"
 
-    # 5. Save Strategy Configuration (Placeholder call)
-    # Pass the derived parameters dictionary
-    # Need access to _save_strategy, assuming it exists via self
-    self._save_strategy(
-        strategy_name,
-        market_data_path,
-        # Extract specific params if needed, or pass the whole dict
-        profit_threshold=strategy_params.get('avg_win_pnl', None), # Example: use avg win pnl?
-        stop_loss=None, # SL/TP were part of trade gen, not derived here
-        features=features,
-        # Pass the derived params dict for saving
-        derived_parameters=strategy_params.get('derived_thresholds', {})
+    # Save a minimal strategy config (mainly linking features and data)
+    self._save_strategy( # Call via self
+        strategy_name=strategy_name,
+        market_data=market_data_path,
+        features=self._selected_features,
+        base_trades_file=os.path.basename(trades_path) # Link to generated trades
     )
 
-    # Store the selected features from this workflow on self if needed by caller
-    self._selected_features = features
-    # Update context panel with derived params
+    self.console.print(f"\n[green]Strategy placeholder '{strategy_name}' created.[/green]")
+    self.console.print(f"Base trade data generated: {os.path.basename(trades_path)}")
+    self.console.print("[yellow]Next Step:[/yellow] Use the 'Analyze Trades' menu to load this file and derive trading rules.")
+
     self._update_selection("Strategy", strategy_name)
-    self._update_selection("Derived Params", strategy_params.get('derived_thresholds', {}))
 
-
-    return strategy_name # Return the name of the created strategy
+    # Return the strategy name, agent creation workflow will continue
+    return strategy_name
 
 def _list_existing_agents(self):
     """

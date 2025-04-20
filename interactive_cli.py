@@ -203,7 +203,6 @@ from cli.cli_trade_generation import (
     view_synthetic_trades,             # Called by analysis menu
     # Helpers needed by other modules via self:
     generate_synthetic_trades_for_agent,
-    _configure_trade_conditions,
     _display_trade_statistics
     # configure_trade_generation, generate_synthetic_trades_workflow are likely standalone
 )
@@ -259,7 +258,6 @@ class SwarmCLI:
         self.view_synthetic_trades = view_synthetic_trades.__get__(self) # Called by analysis menu
         # Helpers potentially used across modules via self:
         self.generate_synthetic_trades_for_agent = generate_synthetic_trades_for_agent.__get__(self) # Called by agent creation
-        self._configure_trade_conditions = _configure_trade_conditions.__get__(self) # Called by agent creation
         self._display_trade_statistics = _display_trade_statistics.__get__(self) # Called by agent creation & analysis
 
         # Trade Analysis
