@@ -425,6 +425,18 @@ class SwarmCLI:
          questionary.text("Press Enter to return to Backtesting Menu...").ask()
          self.backtesting_menu()
 
+    def freqtrade_backtesting_menu(self):
+        # Prompt for config, strategy, datadir, timeframe, etc.
+        args = {
+            "config": [Prompt.ask("Config file", default="user_data/config.json")],
+            "strategy": Prompt.ask("Strategy class name"),
+            "datadir": Prompt.ask("Data directory", default="data/price_data"),
+            "timeframe": Prompt.ask("Timeframe", default="5m"),
+            "timerange": Prompt.ask("Timerange (YYYYMMDD-YYYYMMDD)", default=""),
+            # ...add more as needed
+        }
+        self.console.print("[green]Starting Freqtrade backtest...[/green]")
+        start_backtesting(args)
 
     # --- Trade Generation/Viewing Methods Moved to cli/cli_trade_generation.py ---
 
