@@ -230,6 +230,12 @@ from shared.feature_extractor_vectorbt import get_available_features, calculate_
 from utils.trade_analyzer import TradeAnalyzer
 # Import setup_logging if you want to call it from main()
 from utils import setup_logging
+from freqtrade.commands.optimize_commands import (
+    start_backtesting, start_hyperopt, start_edge, start_lookahead_analysis, start_recursive_analysis
+)
+from freqtrade.commands.analyze_commands import start_analysis_entries_exits
+from freqtrade.commands.data_commands import start_download_data
+from freqtrade.commands.plot_commands import start_plot_dataframe, start_plot_profit
 
 
 class SwarmCLI:
@@ -272,7 +278,7 @@ class SwarmCLI:
         self._display_trade_statistics = _display_trade_statistics.__get__(self) # Called by agent creation & analysis
 
         # Trade Analysis
-        self.analyze_trades_menu = analyze_trades_menu.__get__(self) # <-- CHANGE THIS LINE # Kept as per request
+        self.analyze_trades_menu = analyze_trades_menu.__get__(self) # <-- CHANGE THIS LINE
         self.filter_trades_workflow = filter_trades_workflow.__get__(self)
         self.identify_patterns_workflow = identify_patterns_workflow.__get__(self)
         self.generate_rules_workflow = generate_rules_workflow.__get__(self)
@@ -295,6 +301,7 @@ class SwarmCLI:
         choices = [
             "Manage Agents",
             "Analyze Trades",
+            "Freqtrade Tools",  # New entry
             "Restart",
             "Exit"
         ]
@@ -311,13 +318,165 @@ class SwarmCLI:
             self.manage_agents_menu() # Call the bound method
         elif choice == "Analyze Trades":
             self.analyze_trades_menu() # Call the bound method (Corrected name)
+        elif choice == "Freqtrade Tools":
+            self.freqtrade_tools_menu()
         elif choice == "Restart":
             self.console.print("[green]Restarting main menu...[/green]")
-            # Returning will cause the loop in 'run' to continue, effectively restarting
             return
         elif choice == "Exit":
             self.console.print("[yellow]Exiting SWARM Trading System...[/yellow]")
             sys.exit(0)
+
+    def freqtrade_tools_menu(self):
+        """Submenu for Freqtrade features"""
+        while True:
+            choices = [
+                "Backtesting",
+                "Hyperopt",
+                "Edge Analysis",
+                "FreqAI Backtest/Train",
+                "Download Data",
+                "Analysis (Entries/Exits)",
+                "Plot DataFrame",
+                "Plot Profit",
+                "Back",
+            ]
+            choice = questionary.select(
+                "Freqtrade Tools - Select a feature:",
+                choices=choices
+            ).ask()
+            if choice is None or choice == "Back":
+                return
+            try:
+                if choice == "Backtesting":
+                    self.freqtrade_backtesting_menu()
+                elif choice == "Hyperopt":
+                    self.freqtrade_hyperopt_menu()
+                elif choice == "Edge Analysis":
+                    self.freqtrade_edge_menu()
+                elif choice == "FreqAI Backtest/Train":
+                    self.freqtrade_freqai_menu()
+                elif choice == "Download Data":
+                    self.freqtrade_download_data_menu()
+                elif choice == "Analysis (Entries/Exits)":
+                    self.freqtrade_analysis_menu()
+                elif choice == "Plot DataFrame":
+                    self.freqtrade_plot_dataframe_menu()
+                elif choice == "Plot Profit":
+                    self.freqtrade_plot_profit_menu()
+            except Exception as e:
+                self.console.print(f"[red]Error: {e}[/red]")
+
+    def freqtrade_backtesting_menu(self):
+        args = {
+            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "strategy": questionary.text("Strategy class name").ask(),
+            "datadir": questionary.text("Data directory", default="data/price_data").ask(),
+            "timeframe": questionary.text("Timeframe", default="5m").ask(),
+            "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
+        }
+        self.console.print("[green]Starting Freqtrade backtest...[/green]")
+        try:
+            start_backtesting(args)
+        except Exception as e:
+            self.console.print(f"[red]Backtesting failed: {e}[/red]")
+
+    def freqtrade_hyperopt_menu(self):
+        args = {
+            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "strategy": questionary.text("Strategy class name").ask(),
+            "datadir": questionary.text("Data directory", default="data/price_data").ask(),
+            "timeframe": questionary.text("Timeframe", default="5m").ask(),
+            "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
+            "epochs": int(questionary.text("Epochs", default="100").ask()),
+        }
+        self.console.print("[green]Starting Freqtrade hyperopt...[/green]")
+        try:
+            start_hyperopt(args)
+        except Exception as e:
+            self.console.print(f"[red]Hyperopt failed: {e}[/red]")
+
+    def freqtrade_edge_menu(self):
+        args = {
+            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "strategy": questionary.text("Strategy class name").ask(),
+            "datadir": questionary.text("Data directory", default="data/price_data").ask(),
+            "timeframe": questionary.text("Timeframe", default="5m").ask(),
+            "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
+        }
+        self.console.print("[green]Starting Freqtrade edge analysis...[/green]")
+        try:
+            start_edge(args)
+        except Exception as e:
+            self.console.print(f"[red]Edge analysis failed: {e}[/red]")
+
+    def freqtrade_freqai_menu(self):
+        args = {
+            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "strategy": questionary.text("Strategy class name").ask(),
+            "datadir": questionary.text("Data directory", default="data/price_data").ask(),
+            "timeframe": questionary.text("Timeframe", default="5m").ask(),
+            "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
+            "freqai": True,
+        }
+        self.console.print("[green]Starting FreqAI backtest/train...[/green]")
+        try:
+            start_backtesting(args)
+        except Exception as e:
+            self.console.print(f"[red]FreqAI backtest/train failed: {e}[/red]")
+
+    def freqtrade_download_data_menu(self):
+        args = {
+            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "exchange": questionary.text("Exchange name").ask(),
+            "pairs": questionary.text("Pairs (comma separated, e.g. BTC/USDT,ETH/USDT)").ask().split(","),
+            "timeframes": questionary.text("Timeframes (space separated, e.g. 1m 5m 1h)").ask().split(),
+        }
+        self.console.print("[green]Starting Freqtrade data download...[/green]")
+        try:
+            start_download_data(args)
+        except Exception as e:
+            self.console.print(f"[red]Data download failed: {e}[/red]")
+
+    def freqtrade_analysis_menu(self):
+        args = {
+            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "strategy": questionary.text("Strategy class name").ask(),
+            "datadir": questionary.text("Data directory", default="data/price_data").ask(),
+            "timeframe": questionary.text("Timeframe", default="5m").ask(),
+            "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
+        }
+        self.console.print("[green]Starting Freqtrade analysis (entries/exits)...[/green]")
+        try:
+            start_analysis_entries_exits(args)
+        except Exception as e:
+            self.console.print(f"[red]Analysis failed: {e}[/red]")
+
+    def freqtrade_plot_dataframe_menu(self):
+        args = {
+            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "pairs": questionary.text("Pairs (comma separated, e.g. BTC/USDT,ETH/USDT)").ask().split(","),
+            "indicators1": questionary.text("Indicators row 1 (space separated, e.g. ema3 ema5)", default="").ask().split(),
+            "indicators2": questionary.text("Indicators row 2 (space separated, e.g. macd macdsignal)", default="").ask().split(),
+            "plot_limit": int(questionary.text("Plot limit (default 750)", default="750").ask()),
+        }
+        self.console.print("[green]Starting Freqtrade plot dataframe...[/green]")
+        try:
+            start_plot_dataframe(args)
+        except Exception as e:
+            self.console.print(f"[red]Plot dataframe failed: {e}[/red]")
+
+    def freqtrade_plot_profit_menu(self):
+        args = {
+            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "pairs": questionary.text("Pairs (comma separated, e.g. BTC/USDT,ETH/USDT)").ask().split(","),
+            "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
+        }
+        self.console.print("[green]Starting Freqtrade plot profit...[/green]")
+        try:
+            start_plot_profit(args)
+        except Exception as e:
+            self.console.print(f"[red]Plot profit failed: {e}[/red]")
 
     def _validate_float(self, value, min_val=-np.inf, max_val=np.inf, param_type=None): # Allow wider range by default
         """Validator for questionary prompts requiring float input."""

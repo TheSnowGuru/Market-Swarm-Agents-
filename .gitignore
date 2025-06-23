@@ -5,3 +5,4 @@
 /venv
 *.zip
 tasks.md
+/user_data/strategies/
