@@ -1,3 +1,4 @@
+
 {
     "$schema": "https://schema.freqtrade.io/schema.json",
     "max_open_trades": 3,
@@ -63,10 +64,30 @@
         {"method": "StaticPairList"}
     ],
     "telegram": {
-        "enabled": false
+        "enabled": true,
+        "token": "8015704868:AAGdi_EnpWhLl6PprVQBrqogcOpOoAxnivk",
+        "chat_id": "",
+        "authorized_users": [],
+        "notification_settings": {
+            "status": "on",
+            "warning": "on",
+            "startup": "on",
+            "entry": "on",
+            "entry_fill": "off",
+            "entry_cancel": "on",
+            "exit": "on",
+            "exit_fill": "on",
+            "exit_cancel": "on",
+            "protection_trigger": "on",
+            "protection_trigger_global": "on"
+        }
     },
     "api_server": {
-        "enabled": false
+        "enabled": false,
+        "listen_ip_address": "127.0.0.1",
+        "listen_port": 8080,
+        "username": "user",
+        "password": "pass"
     },
     "bot_name": "ema_strategy_bot",
     "initial_state": "running",

@@ -4,6 +4,21 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        {
+            "name": "freqtrade trade",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "freqtrade",
+            "console": "integratedTerminal",
+            "args": [
+                "trade",
+                // Optional:
+                // "--userdir", "user_data",
+                "--strategy", 
+                "{e0.py}",
+            ]
+        },
+    
 
     
         {

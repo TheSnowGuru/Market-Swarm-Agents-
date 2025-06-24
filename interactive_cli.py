@@ -456,7 +456,7 @@ class SwarmCLI:
         return file_choice
 
     def _data_file_selection(self):
-        data_dir = "data/price_data/btcusd"
+        data_dir = "user_data/data"
         files = [f for f in os.listdir(data_dir) if f.endswith('.csv')]
         files.append("Back")
         file_choice = questionary.select(
@@ -571,9 +571,13 @@ class SwarmCLI:
             self.console.print(f"[red]Edge analysis failed: {e}[/red]")
 
     def freqtrade_freqai_menu(self):
+        strategy_file = self._strategy_file_selection()
+        if strategy_file is None:
+            return
+
         args = {
             "config": [questionary.text("Config file", default="user_data/config.json").ask()],
-            "strategy": questionary.text("Strategy class name").ask(),
+            "strategy": strategy_file.replace('.py', ''),  # Remove .py extension
             "datadir": questionary.text("Data directory", default="data/price_data").ask(),
             "timeframe": questionary.text("Timeframe", default="5m").ask(),
             "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
@@ -586,62 +590,18 @@ class SwarmCLI:
             self.console.print(f"[red]FreqAI backtest/train failed: {e}[/red]")
 
     def freqtrade_download_data_menu(self):
-        # Example exchanges and timeframes; expand as needed
-        exchanges = ["binance", "bitfinex", "kraken", "bybit", "kucoin", "Custom..."]
-        timeframes = ["1m", "5m", "15m", "1h", "4h", "1d", "Custom..."]
-        # Example pairs; in a real app, you might load these from a config or API
-        default_pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT", "SOL/USDT", "Custom..."]
+        config = questionary.text("Config file", default="user_data/config.json").ask()
+        days = questionary.text("How many days backwards from today? (default: 30)", default="30").ask()
+        try:
+            days = int(days)
+        except Exception:
+            days = 30
 
-        config = questionary.text(
-            "Config file:",
-            default="user_data/config.json"
-        ).ask()
-
-        exchange = questionary.select(
-            "Select exchange:",
-            choices=exchanges
-        ).ask()
-        if exchange == "Custom...":
-            exchange = questionary.text("Enter exchange name:").ask()
-
-        pairs = questionary.checkbox(
-            "Select pairs (space to select, enter to confirm):",
-            choices=default_pairs
-        ).ask()
-        if "Custom..." in pairs:
-            custom_pair = questionary.text("Enter custom pair (e.g. LTC/USDT):").ask()
-            pairs = [p for p in pairs if p != "Custom..."]
-            if custom_pair:
-                pairs.append(custom_pair)
-        pairs = [p for p in pairs if p]  # Remove empty
-
-        tfs = questionary.checkbox(
-            "Select timeframes (space to select, enter to confirm):",
-            choices=timeframes
-        ).ask()
-        if "Custom..." in tfs:
-            custom_tf = questionary.text("Enter custom timeframe (e.g. 3m):").ask()
-            tfs = [tf for tf in tfs if tf != "Custom..."]
-            if custom_tf:
-                tfs.append(custom_tf)
-        tfs = [tf for tf in tfs if tf]
-
-        summary_items = [
-            ("Config", config),
-            ("Exchange", exchange),
-            ("Pairs", ", ".join(pairs)),
-            ("Timeframes", ", ".join(tfs)),
-        ]
-        self.console.print("\nConfiguration Summary:")
-        self.console.print(create_menu_table("Download Data Configuration Summary", summary_items))
         if questionary.confirm("Start data download?").ask():
-            self.console.print("[green]Starting Freqtrade data download...[/green]")
             try:
                 args = {
-                    "config": [config],
-                    "exchange": exchange,
-                    "pairs": pairs,
-                    "timeframes": tfs,
+                    "config": config,
+                    "days": days,
                 }
                 start_download_data(args)
             except Exception as e:
@@ -719,7 +679,7 @@ class SwarmCLI:
         # If specific keys need preserving across top-level menus, handle here
         # e.g., if keep_keys: preserved_context = {k: self.current_context.get(k) for k in keep_keys} ...
 
-    def _find_csv_files(self, directory='data'): # Broaden search slightly
+    def _find_csv_files(self, directory='user_data/data'): # Default to user_data/data
         csv_files = []
         if not os.path.isdir(directory):
              self.console.print(f"[red]Directory not found: {directory}[/red]")
@@ -738,7 +698,7 @@ class SwarmCLI:
              self.console.print(f"[red]Error finding CSV files in {directory}: {e}[/red]")
              return []
 
-    def _select_market_data(self, base_dir='data/price_data'):
+    def _select_market_data(self, base_dir='user_data/data'):
         """Selects market data, returning the full path."""
         self.console.print(f"Searching for CSV files in: [cyan]{base_dir}[/cyan]")
         choices = self._find_csv_files(base_dir) # Pass base directory
