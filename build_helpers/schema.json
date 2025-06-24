@@ -985,7 +985,7 @@
           }
         },
         "jwt_secret_key": {
-          "description": "Secret key for JWT authentication.",
+          "description": "randomkey",
           "type": "string"
         },
         "CORS_origins": {

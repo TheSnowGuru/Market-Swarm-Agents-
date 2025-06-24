@@ -12,6 +12,7 @@ from rich.table import Table
 from rich import box
 from rich.layout import Layout
 import re
+import traceback
 
 
 # --- ADD WARNING FILTER ---
@@ -408,6 +409,7 @@ class SwarmCLI:
                 ("Analysis (Entries/Exits)", "Analyze entry/exit points"),
                 ("Plot DataFrame", "Visualize indicators and signals"),
                 ("Plot Profit", "Plot profit/loss charts"),
+                ("Start Webserver (FreqUI)", "Start the Freqtrade Web UI (FreqUI)"),
                 ("Back", "Return to main menu")
             ]
             
@@ -439,9 +441,37 @@ class SwarmCLI:
                     self.freqtrade_plot_dataframe_menu()
                 elif choice == "Plot Profit":
                     self.freqtrade_plot_profit_menu()
+                elif choice == "Start Webserver (FreqUI)":
+                    self._start_webserver_menu()
             except Exception as e:
                 self.console.print(Panel(f"[red]Error: {str(e)}[/red]", border_style="red"))
                 questionary.text("Press Enter to continue...").ask()
+
+    def _start_webserver_menu(self):
+        config_path = questionary.text("Config file", default="user_data/config.json").ask()
+        import json
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            username = config.get('api_server', {}).get('username', 'user')
+            password = config.get('api_server', {}).get('password', 'pass')
+            port = config.get('api_server', {}).get('listen_port', 8080)
+        except Exception as e:
+            self.console.print(f"[red]Failed to read config: {e}[/red]")
+            return
+        self.console.print(f"[green]Starting Freqtrade webserver (FreqUI)...[/green]")
+        import subprocess
+        try:
+            subprocess.Popen([
+                "freqtrade", "webserver", "--config", config_path
+            ])
+            url = f"http://127.0.0.1:{port}"
+            self.console.print(f"[cyan]FreqUI should be available at: {url}[/cyan]")
+            self.console.print(f"[yellow]Login with username: [bold]{username}[/bold] and password: [bold]{password}[/bold][/yellow]")
+            questionary.text("Press Enter to return to the menu...").ask()
+        except Exception as e:
+            self.console.print(f"[red]Failed to start webserver: {e}[/red]")
+            questionary.text("Press Enter to return to the menu...").ask()
 
     def _strategy_file_selection(self):
         strategy_dir = "user_data/strategies"
@@ -457,15 +487,37 @@ class SwarmCLI:
 
     def _data_file_selection(self):
         data_dir = "user_data/data"
-        files = [f for f in os.listdir(data_dir) if f.endswith('.csv')]
-        files.append("Back")
-        file_choice = questionary.select(
-            "Select data file:",
-            choices=files
-        ).ask()
-        if file_choice == "Back" or file_choice is None:
-            return None
-        return os.path.join(data_dir, file_choice)
+        current_dir = data_dir
+        history = []
+        while True:
+            # List subfolders and data files
+            entries = os.listdir(current_dir)
+            subfolders = [f for f in entries if os.path.isdir(os.path.join(current_dir, f))]
+            data_files = [f for f in entries if f.endswith('.csv') or f.endswith('.feather')]
+            menu_choices = []
+            if subfolders:
+                menu_choices.extend([f"[DIR] {f}" for f in subfolders])
+            if data_files:
+                menu_choices.extend(data_files)
+            if current_dir != data_dir:
+                menu_choices.append("[UP] ..")
+            menu_choices.append("Back")
+            file_choice = questionary.select(
+                "Select a subfolder or data file:",
+                choices=menu_choices
+            ).ask()
+            if file_choice == "Back" or file_choice is None:
+                return None
+            if file_choice == "[UP] ..":
+                if history:
+                    current_dir = history.pop()
+                continue
+            if file_choice.startswith("[DIR] "):
+                history.append(current_dir)
+                current_dir = os.path.join(current_dir, file_choice[6:])
+                continue
+            # If a data file is selected
+            return os.path.join(current_dir, file_choice)
 
     def freqtrade_backtesting_menu(self):
         self.console.clear()
@@ -486,15 +538,6 @@ class SwarmCLI:
         if timeframe == "Back" or timeframe is None:
             return
         timerange = self._timerange_prompt()
-        summary_items = [
-            ("Config", config),
-            ("Strategy file", strategy_file),
-            ("Data file", data_file),
-            ("Timeframe", timeframe),
-            ("Timerange", timerange if timerange else f"All available data: {DATA_RANGE_STR}")
-        ]
-        self.console.print("\nConfiguration Summary:")
-        self.console.print(create_menu_table("Backtesting Configuration Summary", summary_items))
         if questionary.confirm("Start backtesting?").ask():
             self.console.print("[green]Starting Freqtrade backtest...[/green]")
             try:
@@ -502,6 +545,7 @@ class SwarmCLI:
                     "config": [config],
                     "strategy": strategy_file.replace('.py',''),
                     "datadir": os.path.dirname(data_file),
+                    "datafile": data_file,
                     "timeframe": timeframe,
                 }
                 if timerange:
@@ -509,6 +553,8 @@ class SwarmCLI:
                 start_backtesting(args)
             except Exception as e:
                 self.console.print(Panel(f"[red]Backtesting failed: {str(e)}[/red]", border_style="red"))
+                tb_str = traceback.format_exc()
+                self.console.print(Panel(f"[red]{tb_str}[/red]", border_style="red"))
             questionary.text("Press Enter to continue...").ask()
 
     def freqtrade_hyperopt_menu(self):
@@ -575,19 +621,29 @@ class SwarmCLI:
         if strategy_file is None:
             return
 
-        args = {
-            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
-            "strategy": strategy_file.replace('.py', ''),  # Remove .py extension
-            "datadir": questionary.text("Data directory", default="data/price_data").ask(),
-            "timeframe": questionary.text("Timeframe", default="5m").ask(),
-            "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
-            "freqai": True,
-        }
-        self.console.print("[green]Starting FreqAI backtest/train...[/green]")
-        try:
-            start_backtesting(args)
-        except Exception as e:
-            self.console.print(f"[red]FreqAI backtest/train failed: {e}[/red]")
+        config = questionary.text("Config file", default="user_data/config.json").ask()
+        data_file = self._data_file_selection()
+        if not data_file:
+            return
+        timeframe = questionary.text("Timeframe", default="5m").ask()
+        timerange = questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask()
+        if questionary.confirm("Start FreqAI backtest/train?").ask():
+            self.console.print("[green]Starting FreqAI backtest/train...[/green]")
+            try:
+                args = {
+                    "config": [config],
+                    "strategy": strategy_file.replace('.py', ''),
+                    "datadir": os.path.dirname(data_file),
+                    "datafile": data_file,
+                    "timeframe": timeframe,
+                    "timerange": timerange,
+                    "freqai": True,
+                }
+                start_backtesting(args)
+            except Exception as e:
+                self.console.print(f"[red]FreqAI backtest/train failed: {e}[/red]")
+                tb_str = traceback.format_exc()
+                self.console.print(Panel(f"[red]{tb_str}[/red]", border_style="red"))
 
     def freqtrade_download_data_menu(self):
         config = questionary.text("Config file", default="user_data/config.json").ask()
