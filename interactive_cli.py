@@ -4,6 +4,13 @@ import logging
 import pandas as pd
 import numpy as np
 import warnings # <-- ADD THIS IMPORT
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+from rich.prompt import Prompt, Confirm
+from rich.table import Table
+from rich.box import box
+from rich.layout import Layout
 
 
 # --- ADD WARNING FILTER ---
@@ -237,6 +244,43 @@ from freqtrade.commands.analyze_commands import start_analysis_entries_exits
 from freqtrade.commands.data_commands import start_download_data
 from freqtrade.commands.plot_commands import start_plot_dataframe, start_plot_profit
 
+def get_available_strategies(strategy_dir="user_data/strategies"):
+    """Get list of available strategy classes from user_data/strategies directory"""
+    strategies = []
+    
+    if not os.path.exists(strategy_dir):
+        return strategies
+        
+    for file in os.listdir(strategy_dir):
+        if file.endswith('.py'):
+            strategy_name = os.path.splitext(file)[0]
+            # Convert filename to potential class name (e.g., ema-start.py -> EmaStart)
+            class_name = ''.join(word.title() for word in strategy_name.replace('-', '_').split('_'))
+            strategies.append((class_name, file))
+    
+    return strategies
+
+def display_strategy_table(console, strategies):
+    """Display available strategies in a Rich table"""
+    table = Table(title="Available Strategies", show_header=True, header_style="bold magenta", box=box.ROUNDED)
+    table.add_column("Strategy Class", style="cyan")
+    table.add_column("File", style="green")
+    
+    for class_name, file in strategies:
+        table.add_row(class_name, file)
+        
+    console.print(Panel(table, border_style="blue"))
+
+def create_menu_table(title, items):
+    """Create a Rich table for menu items"""
+    table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
+    table.add_column("Option", style="cyan")
+    table.add_column("Description", style="green")
+    
+    for item, desc in items:
+        table.add_row(item, desc)
+        
+    return Panel(table, title=title, border_style="blue")
 
 class SwarmCLI:
     def __init__(self):
@@ -328,25 +372,33 @@ class SwarmCLI:
             sys.exit(0)
 
     def freqtrade_tools_menu(self):
-        """Submenu for Freqtrade features"""
+        """Enhanced submenu for Freqtrade features using Rich"""
         while True:
-            choices = [
-                "Backtesting",
-                "Hyperopt",
-                "Edge Analysis",
-                "FreqAI Backtest/Train",
-                "Download Data",
-                "Analysis (Entries/Exits)",
-                "Plot DataFrame",
-                "Plot Profit",
-                "Back",
+            self.console.clear()
+            
+            menu_items = [
+                ("Backtesting", "Run backtesting on historical data"),
+                ("Hyperopt", "Optimize strategy parameters"),
+                ("Edge Analysis", "Analyze strategy edge"),
+                ("FreqAI Backtest/Train", "Train and test FreqAI models"),
+                ("Download Data", "Download historical price data"),
+                ("Analysis (Entries/Exits)", "Analyze entry/exit points"),
+                ("Plot DataFrame", "Visualize indicators and signals"),
+                ("Plot Profit", "Plot profit/loss charts"),
+                ("Back", "Return to main menu")
             ]
+            
+            # Display menu using Rich
+            self.console.print(create_menu_table("Freqtrade Tools", menu_items))
+            
             choice = questionary.select(
-                "Freqtrade Tools - Select a feature:",
-                choices=choices
+                "Select a feature:",
+                choices=[item[0] for item in menu_items]
             ).ask()
+            
             if choice is None or choice == "Back":
                 return
+                
             try:
                 if choice == "Backtesting":
                     self.freqtrade_backtesting_menu()
@@ -365,36 +417,168 @@ class SwarmCLI:
                 elif choice == "Plot Profit":
                     self.freqtrade_plot_profit_menu()
             except Exception as e:
-                self.console.print(f"[red]Error: {e}[/red]")
+                self.console.print(Panel(f"[red]Error: {str(e)}[/red]", border_style="red"))
+                questionary.text("Press Enter to continue...").ask()
 
     def freqtrade_backtesting_menu(self):
-        args = {
-            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
-            "strategy": questionary.text("Strategy class name").ask(),
-            "datadir": questionary.text("Data directory", default="data/price_data").ask(),
-            "timeframe": questionary.text("Timeframe", default="5m").ask(),
-            "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
-        }
-        self.console.print("[green]Starting Freqtrade backtest...[/green]")
-        try:
-            start_backtesting(args)
-        except Exception as e:
-            self.console.print(f"[red]Backtesting failed: {e}[/red]")
+        """Enhanced backtesting menu with Rich UI and strategy detection"""
+        self.console.clear()
+        
+        # Get and display available strategies
+        strategies = get_available_strategies()
+        display_strategy_table(self.console, strategies)
+        
+        # Create configuration form
+        form_items = [
+            ("Config File", "user_data/config.json"),
+            ("Strategy", "Select from above"),
+            ("Timeframe", "5m"),
+            ("Timerange", "YYYYMMDD-YYYYMMDD (optional)"),
+        ]
+        
+        self.console.print(create_menu_table("Backtesting Configuration", form_items))
+        
+        # Get configuration inputs
+        config = questionary.text(
+            "Config file:",
+            default="user_data/config.json"
+        ).ask()
+        
+        strategy_choices = [class_name for class_name, _ in strategies]
+        strategy_choices.append("Back")
+        
+        strategy = questionary.select(
+            "Select strategy:",
+            choices=strategy_choices
+        ).ask()
+        
+        if strategy == "Back" or strategy is None:
+            return
+            
+        timeframe = questionary.select(
+            "Select timeframe:",
+            choices=["1m", "5m", "15m", "1h", "4h", "1d", "Back"]
+        ).ask()
+        
+        if timeframe == "Back" or timeframe is None:
+            return
+            
+        timerange = questionary.text(
+            "Timerange (YYYYMMDD-YYYYMMDD, optional):",
+            default=""
+        ).ask()
+        
+        # Show configuration summary
+        summary_items = [
+            ("Config", config),
+            ("Strategy", strategy),
+            ("Timeframe", timeframe),
+            ("Timerange", timerange if timerange else "All available data")
+        ]
+        
+        self.console.print("\nConfiguration Summary:")
+        self.console.print(create_menu_table("Backtesting Configuration Summary", summary_items))
+        
+        if questionary.confirm("Start backtesting?").ask():
+            self.console.print("[green]Starting Freqtrade backtest...[/green]")
+            try:
+                args = {
+                    "config": [config],
+                    "strategy": strategy,
+                    "timeframe": timeframe,
+                }
+                if timerange:
+                    args["timerange"] = timerange
+                    
+                start_backtesting(args)
+            except Exception as e:
+                self.console.print(Panel(f"[red]Backtesting failed: {str(e)}[/red]", border_style="red"))
+            
+            questionary.text("Press Enter to continue...").ask()
 
     def freqtrade_hyperopt_menu(self):
-        args = {
-            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
-            "strategy": questionary.text("Strategy class name").ask(),
-            "datadir": questionary.text("Data directory", default="data/price_data").ask(),
-            "timeframe": questionary.text("Timeframe", default="5m").ask(),
-            "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
-            "epochs": int(questionary.text("Epochs", default="100").ask()),
-        }
-        self.console.print("[green]Starting Freqtrade hyperopt...[/green]")
-        try:
-            start_hyperopt(args)
-        except Exception as e:
-            self.console.print(f"[red]Hyperopt failed: {e}[/red]")
+        """Enhanced hyperopt menu with Rich UI and strategy detection"""
+        self.console.clear()
+        
+        # Get and display available strategies
+        strategies = get_available_strategies()
+        display_strategy_table(self.console, strategies)
+        
+        # Create configuration form
+        form_items = [
+            ("Config File", "user_data/config.json"),
+            ("Strategy", "Select from above"),
+            ("Epochs", "Number of optimization epochs"),
+            ("Timeframe", "5m"),
+            ("Timerange", "YYYYMMDD-YYYYMMDD (optional)"),
+        ]
+        
+        self.console.print(create_menu_table("Hyperopt Configuration", form_items))
+        
+        # Get configuration inputs
+        config = questionary.text(
+            "Config file:",
+            default="user_data/config.json"
+        ).ask()
+        
+        strategy_choices = [class_name for class_name, _ in strategies]
+        strategy_choices.append("Back")
+        
+        strategy = questionary.select(
+            "Select strategy:",
+            choices=strategy_choices
+        ).ask()
+        
+        if strategy == "Back" or strategy is None:
+            return
+            
+        epochs = questionary.text(
+            "Number of epochs:",
+            default="100"
+        ).ask()
+        
+        timeframe = questionary.select(
+            "Select timeframe:",
+            choices=["1m", "5m", "15m", "1h", "4h", "1d", "Back"]
+        ).ask()
+        
+        if timeframe == "Back" or timeframe is None:
+            return
+            
+        timerange = questionary.text(
+            "Timerange (YYYYMMDD-YYYYMMDD, optional):",
+            default=""
+        ).ask()
+        
+        # Show configuration summary
+        summary_items = [
+            ("Config", config),
+            ("Strategy", strategy),
+            ("Epochs", epochs),
+            ("Timeframe", timeframe),
+            ("Timerange", timerange if timerange else "All available data")
+        ]
+        
+        self.console.print("\nConfiguration Summary:")
+        self.console.print(create_menu_table("Hyperopt Configuration Summary", summary_items))
+        
+        if questionary.confirm("Start hyperopt?").ask():
+            self.console.print("[green]Starting Freqtrade hyperopt...[/green]")
+            try:
+                args = {
+                    "config": [config],
+                    "strategy": strategy,
+                    "epochs": int(epochs),
+                    "timeframe": timeframe,
+                }
+                if timerange:
+                    args["timerange"] = timerange
+                    
+                start_hyperopt(args)
+            except Exception as e:
+                self.console.print(Panel(f"[red]Hyperopt failed: {str(e)}[/red]", border_style="red"))
+            
+            questionary.text("Press Enter to continue...").ask()
 
     def freqtrade_edge_menu(self):
         args = {
