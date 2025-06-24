@@ -9,8 +9,9 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
-from rich.box import box
+from rich import box
 from rich.layout import Layout
+import re
 
 
 # --- ADD WARNING FILTER ---
@@ -282,6 +283,23 @@ def create_menu_table(title, items):
         
     return Panel(table, title=title, border_style="blue")
 
+def get_strategy_classes(strategy_dir="user_data/strategies"):
+    """Return a list of (class_name, file) for all classes in all .py files in the strategies dir."""
+    strategies = []
+    if not os.path.exists(strategy_dir):
+        return strategies
+    for file in os.listdir(strategy_dir):
+        if file.endswith('.py'):
+            path = os.path.join(strategy_dir, file)
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    m = re.match(r'^class\s+([A-Za-z0-9_]+)\s*\(IStrategy\):', line)
+                    if m:
+                        strategies.append((m.group(1), file))
+    return strategies
+
+DATA_RANGE_STR = "2022-06-29 08:54:00 to 2024-12-04 00:00:00 UTC"
+
 class SwarmCLI:
     def __init__(self):
         self.console = Console()
@@ -339,36 +357,41 @@ class SwarmCLI:
         self.console.print(Panel(banner, border_style="blue"))
 
     def main_menu(self):
-        self.display_banner()
-        self._display_selections_panel() # Display selections panel
+        try:
+            self.display_banner()
+            self._display_selections_panel() # Display selections panel
 
-        choices = [
-            "Manage Agents",
-            "Analyze Trades",
-            "Freqtrade Tools",  # New entry
-            "Restart",
-            "Exit"
-        ]
+            choices = [
+                "Manage Agents",
+                "Analyze Trades",
+                "Freqtrade Tools",  # New entry
+                "Restart",
+                "Exit"
+            ]
 
-        choice = questionary.select(
-            "Select an option:",
-            choices=choices
-        ).ask()
+            choice = questionary.select(
+                "Select an option:",
+                choices=choices
+            ).ask()
 
-        if choice is None: # Handle Ctrl+C/EOFError during selection
-             raise KeyboardInterrupt
+            if choice is None: # Handle Ctrl+C/EOFError during selection
+                self.console.print("\n[yellow]Exiting SWARM Trading System...[/yellow]")
+                sys.exit(0)
 
-        if choice == "Manage Agents":
-            self.manage_agents_menu() # Call the bound method
-        elif choice == "Analyze Trades":
-            self.analyze_trades_menu() # Call the bound method (Corrected name)
-        elif choice == "Freqtrade Tools":
-            self.freqtrade_tools_menu()
-        elif choice == "Restart":
-            self.console.print("[green]Restarting main menu...[/green]")
-            return
-        elif choice == "Exit":
-            self.console.print("[yellow]Exiting SWARM Trading System...[/yellow]")
+            if choice == "Manage Agents":
+                self.manage_agents_menu() # Call the bound method
+            elif choice == "Analyze Trades":
+                self.analyze_trades_menu() # Call the bound method (Corrected name)
+            elif choice == "Freqtrade Tools":
+                self.freqtrade_tools_menu()
+            elif choice == "Restart":
+                self.console.print("[green]Restarting main menu...[/green]")
+                return
+            elif choice == "Exit":
+                self.console.print("[yellow]Exiting SWARM Trading System...[/yellow]")
+                sys.exit(0)
+        except (KeyboardInterrupt, EOFError):
+            self.console.print("\n[yellow]Exiting SWARM Trading System...[/yellow]")
             sys.exit(0)
 
     def freqtrade_tools_menu(self):
@@ -420,164 +443,117 @@ class SwarmCLI:
                 self.console.print(Panel(f"[red]Error: {str(e)}[/red]", border_style="red"))
                 questionary.text("Press Enter to continue...").ask()
 
+    def _strategy_file_selection(self):
+        strategy_dir = "user_data/strategies"
+        files = [f for f in os.listdir(strategy_dir) if f.endswith('.py')]
+        files.append("Back")
+        file_choice = questionary.select(
+            "Select strategy file:",
+            choices=files
+        ).ask()
+        if file_choice == "Back" or file_choice is None:
+            return None
+        return file_choice
+
+    def _data_file_selection(self):
+        data_dir = "data/price_data/btcusd"
+        files = [f for f in os.listdir(data_dir) if f.endswith('.csv')]
+        files.append("Back")
+        file_choice = questionary.select(
+            "Select data file:",
+            choices=files
+        ).ask()
+        if file_choice == "Back" or file_choice is None:
+            return None
+        return os.path.join(data_dir, file_choice)
+
     def freqtrade_backtesting_menu(self):
-        """Enhanced backtesting menu with Rich UI and strategy detection"""
         self.console.clear()
-        
-        # Get and display available strategies
-        strategies = get_available_strategies()
-        display_strategy_table(self.console, strategies)
-        
-        # Create configuration form
-        form_items = [
-            ("Config File", "user_data/config.json"),
-            ("Strategy", "Select from above"),
-            ("Timeframe", "5m"),
-            ("Timerange", "YYYYMMDD-YYYYMMDD (optional)"),
-        ]
-        
-        self.console.print(create_menu_table("Backtesting Configuration", form_items))
-        
-        # Get configuration inputs
+        strategy_file = self._strategy_file_selection()
+        if not strategy_file:
+            return
         config = questionary.text(
             "Config file:",
             default="user_data/config.json"
         ).ask()
-        
-        strategy_choices = [class_name for class_name, _ in strategies]
-        strategy_choices.append("Back")
-        
-        strategy = questionary.select(
-            "Select strategy:",
-            choices=strategy_choices
-        ).ask()
-        
-        if strategy == "Back" or strategy is None:
+        data_file = self._data_file_selection()
+        if not data_file:
             return
-            
         timeframe = questionary.select(
             "Select timeframe:",
             choices=["1m", "5m", "15m", "1h", "4h", "1d", "Back"]
         ).ask()
-        
         if timeframe == "Back" or timeframe is None:
             return
-            
-        timerange = questionary.text(
-            "Timerange (YYYYMMDD-YYYYMMDD, optional):",
-            default=""
-        ).ask()
-        
-        # Show configuration summary
+        timerange = self._timerange_prompt()
         summary_items = [
             ("Config", config),
-            ("Strategy", strategy),
+            ("Strategy file", strategy_file),
+            ("Data file", data_file),
             ("Timeframe", timeframe),
-            ("Timerange", timerange if timerange else "All available data")
+            ("Timerange", timerange if timerange else f"All available data: {DATA_RANGE_STR}")
         ]
-        
         self.console.print("\nConfiguration Summary:")
         self.console.print(create_menu_table("Backtesting Configuration Summary", summary_items))
-        
         if questionary.confirm("Start backtesting?").ask():
             self.console.print("[green]Starting Freqtrade backtest...[/green]")
             try:
                 args = {
                     "config": [config],
-                    "strategy": strategy,
+                    "strategy": strategy_file.replace('.py',''),
+                    "datadir": os.path.dirname(data_file),
                     "timeframe": timeframe,
                 }
                 if timerange:
                     args["timerange"] = timerange
-                    
                 start_backtesting(args)
             except Exception as e:
                 self.console.print(Panel(f"[red]Backtesting failed: {str(e)}[/red]", border_style="red"))
-            
             questionary.text("Press Enter to continue...").ask()
 
     def freqtrade_hyperopt_menu(self):
-        """Enhanced hyperopt menu with Rich UI and strategy detection"""
         self.console.clear()
-        
-        # Get and display available strategies
-        strategies = get_available_strategies()
-        display_strategy_table(self.console, strategies)
-        
-        # Create configuration form
-        form_items = [
-            ("Config File", "user_data/config.json"),
-            ("Strategy", "Select from above"),
-            ("Epochs", "Number of optimization epochs"),
-            ("Timeframe", "5m"),
-            ("Timerange", "YYYYMMDD-YYYYMMDD (optional)"),
-        ]
-        
-        self.console.print(create_menu_table("Hyperopt Configuration", form_items))
-        
-        # Get configuration inputs
+        strategy_file = self._strategy_file_selection()
+        if not strategy_file:
+            return
         config = questionary.text(
             "Config file:",
             default="user_data/config.json"
         ).ask()
-        
-        strategy_choices = [class_name for class_name, _ in strategies]
-        strategy_choices.append("Back")
-        
-        strategy = questionary.select(
-            "Select strategy:",
-            choices=strategy_choices
-        ).ask()
-        
-        if strategy == "Back" or strategy is None:
-            return
-            
         epochs = questionary.text(
             "Number of epochs:",
             default="100"
         ).ask()
-        
         timeframe = questionary.select(
             "Select timeframe:",
             choices=["1m", "5m", "15m", "1h", "4h", "1d", "Back"]
         ).ask()
-        
         if timeframe == "Back" or timeframe is None:
             return
-            
-        timerange = questionary.text(
-            "Timerange (YYYYMMDD-YYYYMMDD, optional):",
-            default=""
-        ).ask()
-        
-        # Show configuration summary
+        timerange = self._timerange_prompt()
         summary_items = [
             ("Config", config),
-            ("Strategy", strategy),
+            ("Strategy file", strategy_file),
             ("Epochs", epochs),
             ("Timeframe", timeframe),
-            ("Timerange", timerange if timerange else "All available data")
+            ("Timerange", timerange if timerange else f"All available data: {DATA_RANGE_STR}")
         ]
-        
         self.console.print("\nConfiguration Summary:")
         self.console.print(create_menu_table("Hyperopt Configuration Summary", summary_items))
-        
         if questionary.confirm("Start hyperopt?").ask():
             self.console.print("[green]Starting Freqtrade hyperopt...[/green]")
             try:
                 args = {
                     "config": [config],
-                    "strategy": strategy,
+                    "strategy": strategy_file.replace('.py',''),
                     "epochs": int(epochs),
                     "timeframe": timeframe,
                 }
                 if timerange:
                     args["timerange"] = timerange
-                    
                 start_hyperopt(args)
             except Exception as e:
                 self.console.print(Panel(f"[red]Hyperopt failed: {str(e)}[/red]", border_style="red"))
-            
             questionary.text("Press Enter to continue...").ask()
 
     def freqtrade_edge_menu(self):
@@ -610,17 +586,67 @@ class SwarmCLI:
             self.console.print(f"[red]FreqAI backtest/train failed: {e}[/red]")
 
     def freqtrade_download_data_menu(self):
-        args = {
-            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
-            "exchange": questionary.text("Exchange name").ask(),
-            "pairs": questionary.text("Pairs (comma separated, e.g. BTC/USDT,ETH/USDT)").ask().split(","),
-            "timeframes": questionary.text("Timeframes (space separated, e.g. 1m 5m 1h)").ask().split(),
-        }
-        self.console.print("[green]Starting Freqtrade data download...[/green]")
-        try:
-            start_download_data(args)
-        except Exception as e:
-            self.console.print(f"[red]Data download failed: {e}[/red]")
+        # Example exchanges and timeframes; expand as needed
+        exchanges = ["binance", "bitfinex", "kraken", "bybit", "kucoin", "Custom..."]
+        timeframes = ["1m", "5m", "15m", "1h", "4h", "1d", "Custom..."]
+        # Example pairs; in a real app, you might load these from a config or API
+        default_pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT", "SOL/USDT", "Custom..."]
+
+        config = questionary.text(
+            "Config file:",
+            default="user_data/config.json"
+        ).ask()
+
+        exchange = questionary.select(
+            "Select exchange:",
+            choices=exchanges
+        ).ask()
+        if exchange == "Custom...":
+            exchange = questionary.text("Enter exchange name:").ask()
+
+        pairs = questionary.checkbox(
+            "Select pairs (space to select, enter to confirm):",
+            choices=default_pairs
+        ).ask()
+        if "Custom..." in pairs:
+            custom_pair = questionary.text("Enter custom pair (e.g. LTC/USDT):").ask()
+            pairs = [p for p in pairs if p != "Custom..."]
+            if custom_pair:
+                pairs.append(custom_pair)
+        pairs = [p for p in pairs if p]  # Remove empty
+
+        tfs = questionary.checkbox(
+            "Select timeframes (space to select, enter to confirm):",
+            choices=timeframes
+        ).ask()
+        if "Custom..." in tfs:
+            custom_tf = questionary.text("Enter custom timeframe (e.g. 3m):").ask()
+            tfs = [tf for tf in tfs if tf != "Custom..."]
+            if custom_tf:
+                tfs.append(custom_tf)
+        tfs = [tf for tf in tfs if tf]
+
+        summary_items = [
+            ("Config", config),
+            ("Exchange", exchange),
+            ("Pairs", ", ".join(pairs)),
+            ("Timeframes", ", ".join(tfs)),
+        ]
+        self.console.print("\nConfiguration Summary:")
+        self.console.print(create_menu_table("Download Data Configuration Summary", summary_items))
+        if questionary.confirm("Start data download?").ask():
+            self.console.print("[green]Starting Freqtrade data download...[/green]")
+            try:
+                args = {
+                    "config": [config],
+                    "exchange": exchange,
+                    "pairs": pairs,
+                    "timeframes": tfs,
+                }
+                start_download_data(args)
+            except Exception as e:
+                self.console.print(Panel(f"[red]Data download failed: {str(e)}[/red]", border_style="red"))
+                questionary.text("Press Enter to continue...").ask()
 
     def freqtrade_analysis_menu(self):
         args = {
@@ -768,23 +794,6 @@ class SwarmCLI:
          questionary.text("Press Enter to return to Backtesting Menu...").ask()
          self.backtesting_menu()
 
-    def freqtrade_backtesting_menu(self):
-        # Prompt for config, strategy, datadir, timeframe, etc.
-        args = {
-            "config": [Prompt.ask("Config file", default="user_data/config.json")],
-            "strategy": Prompt.ask("Strategy class name"),
-            "datadir": Prompt.ask("Data directory", default="data/price_data"),
-            "timeframe": Prompt.ask("Timeframe", default="5m"),
-            "timerange": Prompt.ask("Timerange (YYYYMMDD-YYYYMMDD)", default=""),
-            # ...add more as needed
-        }
-        self.console.print("[green]Starting Freqtrade backtest...[/green]")
-        start_backtesting(args)
-
-    # --- Trade Generation/Viewing Methods Moved to cli/cli_trade_generation.py ---
-
-    # --- Trade Analysis Methods Moved to cli/cli_trade_analysis.py ---
-
     def _display_selections_panel(self):
         """Displays current selections in a panel."""
         if not self.current_selections:
@@ -845,6 +854,12 @@ class SwarmCLI:
         # Optionally update the display if it's persistent
         # self._display_selections_panel()
 
+    def _timerange_prompt(self):
+        self.console.print(f"[cyan]Available data range: {DATA_RANGE_STR}[/cyan]")
+        return questionary.text(
+            "Timerange (YYYYMMDD-YYYYMMDD, optional):",
+            default=""
+        ).ask()
 
     # --- Agent Management Methods Moved to cli/cli_agent_management.py ---
     # (Methods like manage_agents_menu, create_agent_workflow etc. are bound in __init__)
