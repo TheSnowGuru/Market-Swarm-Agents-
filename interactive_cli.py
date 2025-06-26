@@ -13,6 +13,8 @@ from rich import box
 from rich.layout import Layout
 import re
 import traceback
+import tempfile
+import json
 
 
 # --- ADD WARNING FILTER ---
@@ -475,7 +477,9 @@ class SwarmCLI:
 
     def _strategy_file_selection(self):
         strategy_dir = "user_data/strategies"
-        files = [f for f in os.listdir(strategy_dir) if f.endswith('.py')]
+        # Exclude __init__.py and any other non-strategy files, and sort alphabetically
+        files = sorted([f for f in os.listdir(strategy_dir) 
+                       if f.endswith('.py') and f != '__init__.py' and not f.startswith('__')])
         files.append("Back")
         file_choice = questionary.select(
             "Select strategy file:",
@@ -486,14 +490,14 @@ class SwarmCLI:
         return file_choice
 
     def _data_file_selection(self):
-        data_dir = "user_data/data"
+        data_dir = "user_data/data/binance/futures"
         current_dir = data_dir
         history = []
         while True:
             # List subfolders and data files
             entries = os.listdir(current_dir)
-            subfolders = [f for f in entries if os.path.isdir(os.path.join(current_dir, f))]
-            data_files = [f for f in entries if f.endswith('.csv') or f.endswith('.feather')]
+            subfolders = sorted([f for f in entries if os.path.isdir(os.path.join(current_dir, f))])
+            data_files = sorted([f for f in entries if f.endswith('.csv') or f.endswith('.feather')])
             menu_choices = []
             if subfolders:
                 menu_choices.extend([f"[DIR] {f}" for f in subfolders])
@@ -519,38 +523,81 @@ class SwarmCLI:
             # If a data file is selected
             return os.path.join(current_dir, file_choice)
 
+    def _extract_pair_and_timeframe_from_filename(self, filename):
+        # Handles files like ADA_USDT_USDT-1m-futures.feather, BTC_USDT-5m.feather, etc.
+        import re
+        base = os.path.basename(filename)
+        # Find all ALLCAPS tokens separated by underscores
+        pair_match = re.match(r"([A-Z0-9]+)_([A-Z0-9]+)", base)
+        # Find the first -<number><mhd> (e.g., -5m, -1h, -8h)
+        timeframe_match = re.search(r"-([0-9]+[mhd])", base)
+        if pair_match and timeframe_match:
+            base_pair = f"{pair_match.group(1)}/{pair_match.group(2)}:USDT"
+            timeframe = timeframe_match.group(1)
+            return base_pair, timeframe
+        return None, None
+
+    def _filename_to_classname(self, filename):
+        # Remove .py extension, split by _ and - and capitalize each part
+        name = filename.replace('.py', '')
+        return ''.join(part.capitalize() for part in re.split(r'[_\-]', name))
+
     def freqtrade_backtesting_menu(self):
+        import json
+        import tempfile
+        import os
         self.console.clear()
         strategy_file = self._strategy_file_selection()
         if not strategy_file:
             return
-        config = questionary.text(
+        config_path = questionary.text(
             "Config file:",
             default="user_data/config.json"
         ).ask()
-        data_file = self._data_file_selection()
-        if not data_file:
-            return
-        timeframe = questionary.select(
-            "Select timeframe:",
-            choices=["1m", "5m", "15m", "1h", "4h", "1d", "Back"]
-        ).ask()
-        if timeframe == "Back" or timeframe is None:
-            return
+        self.console.print(f"[yellow]DEBUG: User selected config_path: {config_path}")
+        # Loop until a valid data file is selected and pair/timeframe are extracted
+        while True:
+            data_file = self._data_file_selection()
+            self.console.print(f"[yellow]DEBUG: User selected data_file: {data_file}")
+            if not data_file:
+                # Only return to Freqtrade Tools menu if user cancels
+                return
+            pair, file_timeframe = self._extract_pair_and_timeframe_from_filename(data_file)
+            self.console.print(f"[yellow]DEBUG: Extracted pair: {pair}, timeframe: {file_timeframe}")
+            if not pair or not file_timeframe:
+                self.console.print("[red]Could not extract pair or timeframe from filename. Please check the file name format and try again.[/red]")
+                continue  # Let user select again
+            break  # Valid file and extraction, continue
+        timeframe = file_timeframe
         timerange = self._timerange_prompt()
         if questionary.confirm("Start backtesting?").ask():
             self.console.print("[green]Starting Freqtrade backtest...[/green]")
             try:
+                strategy_class = self._filename_to_classname(strategy_file)
+                self.console.print(f"[yellow]DEBUG: Strategy class: {strategy_class}")
+                with open(config_path, 'r') as f:
+                    config_dict = json.load(f)
+                config_dict['pair_whitelist'] = [pair]
+                config_dict['timeframe'] = timeframe
+                config_dict['datadir'] = os.path.dirname(data_file)
+                # Write patched config to a temp file
+                with tempfile.NamedTemporaryFile('w', delete=False, suffix='.json', dir='user_data') as tmpfile:
+                    json.dump(config_dict, tmpfile)
+                    tmpfile_path = tmpfile.name
+                self.console.print(f"[yellow]DEBUG: Using temp config {tmpfile_path}")
+                # Check if temp config is a file and not a directory
+                if not os.path.isfile(tmpfile_path):
+                    self.console.print(f"[red]ERROR: Temp config path {tmpfile_path} is not a file! Aborting.[/red]")
+                    return
                 args = {
-                    "config": [config],
-                    "strategy": strategy_file.replace('.py',''),
-                    "datadir": os.path.dirname(data_file),
-                    "datafile": data_file,
-                    "timeframe": timeframe,
+                    "config": tmpfile_path,
+                    "strategy": strategy_class,
                 }
+                self.console.print(f"[yellow]DEBUG: Args to start_backtesting: {args}")
                 if timerange:
                     args["timerange"] = timerange
                 start_backtesting(args)
+                os.remove(tmpfile_path)
             except Exception as e:
                 self.console.print(Panel(f"[red]Backtesting failed: {str(e)}[/red]", border_style="red"))
                 tb_str = traceback.format_exc()
@@ -570,6 +617,10 @@ class SwarmCLI:
             "Number of epochs:",
             default="100"
         ).ask()
+        data_file = self._data_file_selection()
+        if not data_file:
+            return
+        pair = self._extract_pair_from_filename(data_file)
         timeframe = questionary.select(
             "Select timeframe:",
             choices=["1m", "5m", "15m", "1h", "4h", "1d", "Back"]
@@ -589,11 +640,13 @@ class SwarmCLI:
         if questionary.confirm("Start hyperopt?").ask():
             self.console.print("[green]Starting Freqtrade hyperopt...[/green]")
             try:
+                strategy_class = self._filename_to_classname(strategy_file)
                 args = {
                     "config": [config],
-                    "strategy": strategy_file.replace('.py',''),
+                    "strategy": strategy_class,
                     "epochs": int(epochs),
                     "timeframe": timeframe,
+                    "pairs": [pair] if pair else None,
                 }
                 if timerange:
                     args["timerange"] = timerange
