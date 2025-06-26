@@ -15,12 +15,46 @@ import re
 import traceback
 import tempfile
 import json
+from pathlib import Path
+from freqtrade.exceptions import OperationalException
 
 
 # --- ADD WARNING FILTER ---
 # Suppress the specific vectorbt settings warning if it's just noise
 warnings.filterwarnings("ignore", message="Could not configure vectorbt settings: 'active'")
 # --- END WARNING FILTER ---
+
+
+# Utility function to sanitize config path
+def get_valid_config_path(config_path, return_list=False):
+    """
+    Ensures the config path is a valid file. If not, returns 'user_data/config.json'.
+    Args:
+        config_path: String or list of config paths
+        return_list: If True, always return a list. If False, return same type as input.
+    Returns:
+        String or list depending on input type and return_list parameter
+    """
+    import os
+    default_config = 'user_data/config.json'
+    
+    def validate_single_path(path):
+        if not path or path.strip() == '' or path.strip() == '/' or not os.path.isfile(path):
+            print(f"[yellow]WARNING: Invalid config path '{path}'. Using default '{default_config}'.[/yellow]")
+            return default_config
+        return path
+    
+    # Handle list input
+    if isinstance(config_path, list):
+        if not config_path:  # Empty list
+            result = [default_config]
+        else:
+            result = [validate_single_path(path) for path in config_path]
+        return result if return_list else result[0]
+    
+    # Handle string input
+    result = validate_single_path(config_path)
+    return [result] if return_list else result
 
 
 from rich.console import Console
@@ -451,16 +485,7 @@ class SwarmCLI:
 
     def _start_webserver_menu(self):
         config_path = questionary.text("Config file", default="user_data/config.json").ask()
-        import json
-        try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-            username = config.get('api_server', {}).get('username', 'user')
-            password = config.get('api_server', {}).get('password', 'pass')
-            port = config.get('api_server', {}).get('listen_port', 8080)
-        except Exception as e:
-            self.console.print(f"[red]Failed to read config: {e}[/red]")
-            return
+        config_path = get_valid_config_path(config_path)
         self.console.print(f"[green]Starting Freqtrade webserver (FreqUI)...[/green]")
         import subprocess
         try:
@@ -524,18 +549,49 @@ class SwarmCLI:
             return os.path.join(current_dir, file_choice)
 
     def _extract_pair_and_timeframe_from_filename(self, filename):
-        # Handles files like ADA_USDT_USDT-1m-futures.feather, BTC_USDT-5m.feather, etc.
+        """
+        Extract trading pair and timeframe from filename.
+        Handles various formats:
+        - ADA_USDT_USDT-1m-futures.feather
+        - BTC_USDT-5m.feather
+        - ETH_USDT-1h.csv
+        etc.
+        """
         import re
+        # Valid timeframe formats that Freqtrade accepts
+        VALID_TIMEFRAMES = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '2w', '1M', '1y']
+        
         base = os.path.basename(filename)
+        self.console.print(f"[yellow]DEBUG: Processing filename: {base}[/yellow]")
+        
         # Find all ALLCAPS tokens separated by underscores
         pair_match = re.match(r"([A-Z0-9]+)_([A-Z0-9]+)", base)
-        # Find the first -<number><mhd> (e.g., -5m, -1h, -8h)
-        timeframe_match = re.search(r"-([0-9]+[mhd])", base)
-        if pair_match and timeframe_match:
-            base_pair = f"{pair_match.group(1)}/{pair_match.group(2)}:USDT"
-            timeframe = timeframe_match.group(1)
-            return base_pair, timeframe
-        return None, None
+        # Find the first -<number><mhd> (e.g., -5m, -1h, -8h, -1d)
+        timeframe_match = re.search(r"-([0-9]+[mhdwy])", base.lower())  # Convert to lower case for matching
+        
+        if not pair_match:
+            self.console.print(f"[red]Could not extract trading pair from filename: {base}[/red]")
+            return None, None
+            
+        if not timeframe_match:
+            self.console.print(f"[red]Could not extract timeframe from filename: {base}[/red]")
+            return None, None
+            
+        # Extract and format the trading pair
+        base_currency = pair_match.group(1)
+        quote_currency = pair_match.group(2)
+        pair = f"{base_currency}/{quote_currency}"
+        
+        # Extract and validate the timeframe
+        timeframe = timeframe_match.group(1).lower()  # Convert to lower case
+        
+        # Validate the timeframe
+        if timeframe not in VALID_TIMEFRAMES:
+            self.console.print(f"[red]Invalid timeframe '{timeframe}'. Must be one of: {', '.join(VALID_TIMEFRAMES)}[/red]")
+            return None, None
+            
+        self.console.print(f"[green]Successfully extracted pair: {pair}, timeframe: {timeframe}[/green]")
+        return pair, timeframe
 
     def _filename_to_classname(self, filename):
         # Remove .py extension, split by _ and - and capitalize each part
@@ -546,6 +602,7 @@ class SwarmCLI:
         import json
         import tempfile
         import os
+        import pandas as pd
         self.console.clear()
         strategy_file = self._strategy_file_selection()
         if not strategy_file:
@@ -554,48 +611,124 @@ class SwarmCLI:
             "Config file:",
             default="user_data/config.json"
         ).ask()
-        self.console.print(f"[yellow]DEBUG: User selected config_path: {config_path}")
+        config_path = get_valid_config_path(config_path)  # Get single path for reading
+        self.console.print(f"[yellow]DEBUG: User selected config_path: {config_path}[/yellow]")
+        
         # Loop until a valid data file is selected and pair/timeframe are extracted
         while True:
             data_file = self._data_file_selection()
-            self.console.print(f"[yellow]DEBUG: User selected data_file: {data_file}")
+            self.console.print(f"[yellow]DEBUG: User selected data_file: {data_file}[/yellow]")
             if not data_file:
                 # Only return to Freqtrade Tools menu if user cancels
                 return
+
+            # Validate data file format and content
+            try:
+                if data_file.endswith('.feather'):
+                    df = pd.read_feather(data_file)
+                elif data_file.endswith('.csv'):
+                    df = pd.read_csv(data_file)
+                else:
+                    self.console.print(f"[red]Unsupported file format. Only .feather and .csv files are supported.[/red]")
+                    continue
+
+                # Check if dataframe has required columns
+                required_columns = ['date', 'open', 'high', 'low', 'close', 'volume']
+                missing_columns = [col for col in required_columns if col not in df.columns]
+                if missing_columns:
+                    self.console.print(f"[red]Data file missing required columns: {', '.join(missing_columns)}[/red]")
+                    continue
+
+                # --- Normalize date column ---
+                self.console.print(f"[yellow]DEBUG: Normalizing 'date' column...[/yellow]")
+                df['date'] = pd.to_datetime(df['date'], errors='coerce')
+                if df['date'].isnull().any():
+                    self.console.print(f"[red]Some dates could not be parsed. Please check your data file.[/red]")
+                    continue
+                # Remove timezone info if present
+                if df['date'].dt.tz is not None:
+                    df['date'] = df['date'].dt.tz_localize(None)
+                df = df.set_index('date')
+                # Print index info and first few rows
+                self.console.print(f"[yellow]DEBUG: DataFrame index type: {df.index.dtype}[/yellow]")
+                self.console.print(f"[yellow]DEBUG: DataFrame index sample: {df.index[:5]}[/yellow]")
+                self.console.print(f"[yellow]DEBUG: DataFrame head:\n{df.head(3)}[/yellow]")
+
+                # --- Check for sufficient data after trimming ---
+                # Get startup candle count from config or strategy
+                startup_candles = 0
+                try:
+                    with open(config_path, 'r') as f:
+                        config_dict_tmp = json.load(f)
+                    startup_candles = config_dict_tmp.get('startup_candle_count', 0)
+                except Exception:
+                    pass
+                if not startup_candles:
+                    startup_candles = 200  # Fallback default
+                self.console.print(f"[yellow]DEBUG: Startup candle count: {startup_candles}[/yellow]")
+                self.console.print(f"[yellow]DEBUG: DataFrame rows before trimming: {len(df)}[/yellow]")
+                if len(df) <= startup_candles:
+                    self.console.print(f"[red]Not enough data for startup candles ({startup_candles}). Data rows: {len(df)}. Aborting.[/red]")
+                    return
+
+            except Exception as e:
+                self.console.print(f"[red]Error reading data file: {str(e)}[/red]")
+                self.console.print("[red]Please select a valid data file.[/red]")
+                continue
+
             pair, file_timeframe = self._extract_pair_and_timeframe_from_filename(data_file)
-            self.console.print(f"[yellow]DEBUG: Extracted pair: {pair}, timeframe: {file_timeframe}")
+            self.console.print(f"[yellow]DEBUG: Extracted pair: {pair}, timeframe: {file_timeframe}[/yellow]")
             if not pair or not file_timeframe:
                 self.console.print("[red]Could not extract pair or timeframe from filename. Please check the file name format and try again.[/red]")
                 continue  # Let user select again
             break  # Valid file and extraction, continue
+        
         timeframe = file_timeframe
         timerange = self._timerange_prompt()
+        
         if questionary.confirm("Start backtesting?").ask():
             self.console.print("[green]Starting Freqtrade backtest...[/green]")
             try:
                 strategy_class = self._filename_to_classname(strategy_file)
-                self.console.print(f"[yellow]DEBUG: Strategy class: {strategy_class}")
+                self.console.print(f"[yellow]DEBUG: Strategy class: {strategy_class}[/yellow]")
+                
+                # Load and show original config
                 with open(config_path, 'r') as f:
                     config_dict = json.load(f)
+                self.console.print(f"[yellow]DEBUG: Original config:\n{json.dumps(config_dict, indent=2)}[/yellow]")
+                
+                # Update config
                 config_dict['pair_whitelist'] = [pair]
                 config_dict['timeframe'] = timeframe
                 config_dict['datadir'] = os.path.dirname(data_file)
+                
+                # Show modified config
+                self.console.print(f"[yellow]DEBUG: Modified config:\n{json.dumps(config_dict, indent=2)}[/yellow]")
+                
                 # Write patched config to a temp file
                 with tempfile.NamedTemporaryFile('w', delete=False, suffix='.json', dir='user_data') as tmpfile:
                     json.dump(config_dict, tmpfile)
                     tmpfile_path = tmpfile.name
-                self.console.print(f"[yellow]DEBUG: Using temp config {tmpfile_path}")
+                self.console.print(f"[yellow]DEBUG: Using temp config at: {tmpfile_path}[/yellow]")
+                
+                # Verify temp file contents
+                with open(tmpfile_path, 'r') as f:
+                    temp_config = json.load(f)
+                self.console.print(f"[yellow]DEBUG: Verified temp config contents:\n{json.dumps(temp_config, indent=2)}[/yellow]")
+                
                 # Check if temp config is a file and not a directory
                 if not os.path.isfile(tmpfile_path):
                     self.console.print(f"[red]ERROR: Temp config path {tmpfile_path} is not a file! Aborting.[/red]")
                     return
+                
                 args = {
-                    "config": tmpfile_path,
+                    "config": get_valid_config_path(tmpfile_path, return_list=True),  # Backtesting expects a list
                     "strategy": strategy_class,
                 }
-                self.console.print(f"[yellow]DEBUG: Args to start_backtesting: {args}")
                 if timerange:
                     args["timerange"] = timerange
+                
+                self.console.print(f"[yellow]DEBUG: Final args to start_backtesting: {args}[/yellow]")
                 start_backtesting(args)
                 os.remove(tmpfile_path)
             except Exception as e:
@@ -613,6 +746,7 @@ class SwarmCLI:
             "Config file:",
             default="user_data/config.json"
         ).ask()
+        config = get_valid_config_path(config, return_list=True)  # Hyperopt expects a list
         epochs = questionary.text(
             "Number of epochs:",
             default="100"
@@ -656,8 +790,10 @@ class SwarmCLI:
             questionary.text("Press Enter to continue...").ask()
 
     def freqtrade_edge_menu(self):
+        config = questionary.text("Config file", default="user_data/config.json").ask()
+        config = get_valid_config_path(config, return_list=True)  # Edge expects a list
         args = {
-            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "config": config,
             "strategy": questionary.text("Strategy class name").ask(),
             "datadir": questionary.text("Data directory", default="data/price_data").ask(),
             "timeframe": questionary.text("Timeframe", default="5m").ask(),
@@ -673,33 +809,22 @@ class SwarmCLI:
         strategy_file = self._strategy_file_selection()
         if strategy_file is None:
             return
-
         config = questionary.text("Config file", default="user_data/config.json").ask()
-        data_file = self._data_file_selection()
-        if not data_file:
-            return
-        timeframe = questionary.text("Timeframe", default="5m").ask()
-        timerange = questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask()
-        if questionary.confirm("Start FreqAI backtest/train?").ask():
-            self.console.print("[green]Starting FreqAI backtest/train...[/green]")
-            try:
-                args = {
-                    "config": [config],
-                    "strategy": strategy_file.replace('.py', ''),
-                    "datadir": os.path.dirname(data_file),
-                    "datafile": data_file,
-                    "timeframe": timeframe,
-                    "timerange": timerange,
-                    "freqai": True,
-                }
-                start_backtesting(args)
-            except Exception as e:
-                self.console.print(f"[red]FreqAI backtest/train failed: {e}[/red]")
-                tb_str = traceback.format_exc()
-                self.console.print(Panel(f"[red]{tb_str}[/red]", border_style="red"))
+        config = get_valid_config_path(config, return_list=True)  # FreqAI expects a list
+        args = {
+            "config": config,
+            "strategy": strategy_file.replace('.py', ''),
+            "datadir": os.path.dirname(data_file),
+            "datafile": data_file,
+            "timeframe": timeframe,
+            "timerange": timerange,
+            "freqai": True,
+        }
+        start_backtesting(args)
 
     def freqtrade_download_data_menu(self):
         config = questionary.text("Config file", default="user_data/config.json").ask()
+        config = get_valid_config_path(config, return_list=False)  # Download data expects a string
         days = questionary.text("How many days backwards from today? (default: 30)", default="30").ask()
         try:
             days = int(days)
@@ -718,8 +843,10 @@ class SwarmCLI:
                 questionary.text("Press Enter to continue...").ask()
 
     def freqtrade_analysis_menu(self):
+        config = questionary.text("Config file", default="user_data/config.json").ask()
+        config = get_valid_config_path(config, return_list=True)  # Analysis expects a list
         args = {
-            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "config": config,
             "strategy": questionary.text("Strategy class name").ask(),
             "datadir": questionary.text("Data directory", default="data/price_data").ask(),
             "timeframe": questionary.text("Timeframe", default="5m").ask(),
@@ -732,8 +859,10 @@ class SwarmCLI:
             self.console.print(f"[red]Analysis failed: {e}[/red]")
 
     def freqtrade_plot_dataframe_menu(self):
+        config = questionary.text("Config file", default="user_data/config.json").ask()
+        config = get_valid_config_path(config, return_list=True)  # Plot expects a list
         args = {
-            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "config": [config],
             "pairs": questionary.text("Pairs (comma separated, e.g. BTC/USDT,ETH/USDT)").ask().split(","),
             "indicators1": questionary.text("Indicators row 1 (space separated, e.g. ema3 ema5)", default="").ask().split(),
             "indicators2": questionary.text("Indicators row 2 (space separated, e.g. macd macdsignal)", default="").ask().split(),
@@ -746,8 +875,10 @@ class SwarmCLI:
             self.console.print(f"[red]Plot dataframe failed: {e}[/red]")
 
     def freqtrade_plot_profit_menu(self):
+        config = questionary.text("Config file", default="user_data/config.json").ask()
+        config = get_valid_config_path(config)
         args = {
-            "config": [questionary.text("Config file", default="user_data/config.json").ask()],
+            "config": [config],
             "pairs": questionary.text("Pairs (comma separated, e.g. BTC/USDT,ETH/USDT)").ask().split(","),
             "timerange": questionary.text("Timerange (YYYYMMDD-YYYYMMDD)", default="").ask(),
         }

@@ -44,6 +44,8 @@ def log_config_error_range(path: str, errmsg: str) -> str:
 
 def load_file(path: Path) -> dict[str, Any]:
     try:
+        if path.is_dir():
+            raise OperationalException(f'Config path "{path}" is a directory, not a file.')
         with path.open("r") as file:
             config = rapidjson.load(file, parse_mode=CONFIG_PARSE_MODE)
     except FileNotFoundError:
@@ -58,6 +60,9 @@ def load_config_file(path: str) -> dict[str, Any]:
     :return: configuration as dictionary
     """
     try:
+        # Check if path is a directory
+        if path != "-" and Path(path).is_dir():
+            raise OperationalException(f'Config path "{path}" is a directory, not a file.')
         # Read config from stdin if requested in the options
         with Path(path).open() if path != "-" else sys.stdin as file:
             config = rapidjson.load(file, parse_mode=CONFIG_PARSE_MODE)
@@ -101,6 +106,9 @@ def load_from_files(
         if base_path:
             # Prepend basepath to allow for relative assignments
             file = base_path / file
+
+        if not file.is_file():
+            raise OperationalException(f'Config path "{file}" is not a file.')
 
         config_tmp = load_config_file(str(file))
         if "add_config_files" in config_tmp:

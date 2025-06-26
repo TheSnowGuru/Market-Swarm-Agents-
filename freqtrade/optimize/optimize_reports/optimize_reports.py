@@ -465,6 +465,25 @@ def generate_strategy_stats(
     start_balance = get_dry_run_wallet(config)
     stake_currency = config["stake_currency"]
 
+    # Patch: Check if results DataFrame is empty before calculating stats
+    if len(results) == 0:
+        print(f"[generate_strategy_stats] No trades for strategy '{strategy}'. Skipping stats calculation.")
+        return {
+            "results": [],
+            "config": config,
+            "locks": content["locks"],
+            "rejected_signals": content["rejected_signals"],
+            "timedout_entry_orders": content["timedout_entry_orders"],
+            "timedout_exit_orders": content["timedout_exit_orders"],
+            "canceled_trade_entries": content["canceled_trade_entries"],
+            "canceled_entry_orders": content["canceled_entry_orders"],
+            "replaced_entry_orders": content["replaced_entry_orders"],
+            "final_balance": content["final_balance"],
+            "pair_stats": [],
+            "pairlist": pairlist,
+            "metadata": {},
+        }
+
     pair_results = generate_pair_metrics(
         pairlist,
         stake_currency=stake_currency,
@@ -678,6 +697,15 @@ def generate_backtest_stats(
     :param max_date: Backtest end date
     :return: Dictionary containing results per strategy and a strategy summary.
     """
+    # Patch: Check if there are any trades in all_results before calculating stats
+    has_trades = any(
+        (v.get("results") is not None and len(v["results"]) > 0)
+        for v in all_results.values()
+    )
+    if not has_trades:
+        print("[generate_backtest_stats] No trades found in any strategy. Skipping stats calculation.")
+        return {"strategy": {}, "metadata": {}, "strategy_comparison": []}
+
     result: BacktestResultType = get_BacktestResultType_default()
     market_change = calculate_market_change(btdata, "close", min_date=min_date)
     metadata = {}

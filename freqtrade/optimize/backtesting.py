@@ -1402,17 +1402,24 @@ class Backtesting:
                 # assumption: there can't be multiple open entry orders at any given time
                 return trade.nr_of_successful_entries == 0
         return False
-
+    
     def validate_row(
         self, data: dict, pair: str, row_index: int, current_time: datetime
     ) -> tuple | None:
         try:
             # Row is treated as "current incomplete candle".
             # entry / exit signals are shifted by 1 to compensate for this.
+            if pair not in data:
+                print(f"[validate_row] Pair '{pair}' not found in data.")
+                return None
+            if row_index >= len(data[pair]):
+                print(f"[validate_row] Out of range: pair='{pair}', row_index={row_index}, data_len={len(data[pair])}")
+                return None
             row = data[pair][row_index]
         except IndexError:
             # missing Data for one pair at the end.
             # Warnings for this are shown during data loading
+            print(f"[validate_row] IndexError: pair='{pair}', row_index={row_index}, data_len={len(data.get(pair, []))}")
             return None
 
         # Waits until the time-counter reaches the start of the data for this pair.
