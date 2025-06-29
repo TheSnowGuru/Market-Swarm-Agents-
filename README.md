@@ -35,6 +35,14 @@ The **Master Agent** oversees all these agents, ranks their performance, allocat
   - Easy extension and customization
   - Pluggable strategy and resource management
 
+### 🛡️ Robustness & Error Handling
+- **Graceful Config Handling**: CLI and backtesting now handle missing or invalid config paths, always defaulting to a valid config and warning the user.
+- **Data File Validation**: Data file selection is robust, with checks for required columns, file format, and sufficient data for startup candles. Clear error messages are shown for any issues.
+- **Startup Candle Checks**: The system checks for enough data for the required startup period before running backtests, aborting early with a clear message if insufficient.
+- **Backtest & Reporting Stability**: If no trades are made (due to data, strategy, or timerange), the system prints a warning and skips stats calculation, never crashing with ValueError.
+- **Dynamic Indicator Columns**: Strategies now always create all indicator columns (like dynamic moving averages and EWO) needed for entry/exit logic, preventing KeyErrors.
+- **Detailed Debug Output**: The CLI and backtesting pipeline print detailed debug output at every step, making troubleshooting and workflow transparency much easier.
+
 ### 📋 File Structure
 - **`data/`**: Contains shared market data and a central event data stream.
   - **`shared_data/`**: Market data accessible to all agents.
